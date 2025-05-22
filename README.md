@@ -59,6 +59,3 @@ The card dictionary is essential for the fuzzy name correction. To generate it:
 *   Integration with a Raspberry Pi and a physical card sorting machine.
 *   Development of `main.py` as the primary application interface.
 *   Improved error handling and configuration options.
-
-## Contributing
-Contributions are welcome! Please feel free to submit pull requests or open issues for any bugs or feature suggestions.
