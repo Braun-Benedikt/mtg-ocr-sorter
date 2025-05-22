@@ -10,21 +10,11 @@ import numpy as np
 import requests
 from symspellpy.symspellpy import SymSpell, Verbosity
 
-from recognition.fuzzy_match import CardNameCorrector
+from .fuzzy_match import CardNameCorrector
 
 # Global Constants (if any specific ones are needed beyond defaults in main)
 # Example: CROP_RATIO_HEIGHT_START = 0.23 (if used by other functions externally)
 # For now, we assume these are mainly for extract_card_name_area and can be kept there or made local.
-
-# Conditional Tesseract path for Windows
-if platform.system() == "Windows":
-    tesseract_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    if os.path.exists(tesseract_path):
-        pytesseract.pytesseract.tesseract_cmd = tesseract_path
-    else:
-        print(f"INFO: Tesseract executable not found at {tesseract_path}. Assuming it's in PATH.")
-# For other OS, assume Tesseract is in PATH and no specific command is needed.
-
 
 # Default crop ratios used in extract_card_name_area
 # These can be defined as constants if they are intended to be fixed,
@@ -34,6 +24,12 @@ CROP_RATIO_HEIGHT_START = 0.23
 CROP_RATIO_HEIGHT_END = 0.255
 CROP_RATIO_WIDTH_START = 0.32
 CROP_RATIO_WIDTH_END = 0.60
+
+# Konfiguration
+base_path = Path(__file__).resolve().parent
+dir_path = base_path / "tests" / "test_images"
+card_output = base_path / "tests"/ "test_carddata.csv"
+dictionary_path = base_path / "cards" / "card_names_symspell_clean.txt"
 
 # OCR & Bildverarbeitung
 def extract_card_name_area(image: np.ndarray, 
