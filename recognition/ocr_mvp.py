@@ -10,7 +10,7 @@ import numpy as np
 import requests
 from symspellpy.symspellpy import SymSpell, Verbosity
 
-from .fuzzy_match import CardNameCorrector
+from fuzzy_match import CardNameCorrector
 
 # Global Constants (if any specific ones are needed beyond defaults in main)
 # Example: CROP_RATIO_HEIGHT_START = 0.23 (if used by other functions externally)
@@ -24,6 +24,15 @@ CROP_RATIO_HEIGHT_START = 0.23
 CROP_RATIO_HEIGHT_END = 0.255
 CROP_RATIO_WIDTH_START = 0.32
 CROP_RATIO_WIDTH_END = 0.60
+
+# Conditional Tesseract path for Windows
+if platform.system() == "Windows":
+    tesseract_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.path.exists(tesseract_path):
+        pytesseract.pytesseract.tesseract_cmd = tesseract_path
+    else:
+        print(f"INFO: Tesseract executable not found at {tesseract_path}. Assuming it's in PATH.")
+# For other OS, assume Tesseract is in PATH and no specific command is needed.
 
 # Konfiguration
 base_path = Path(__file__).resolve().parent
