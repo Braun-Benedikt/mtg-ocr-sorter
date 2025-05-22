@@ -30,7 +30,7 @@ Python 3.x required.
 ### Tesseract OCR
 *   Tesseract OCR must be installed.
 *   Installation instructions can be found at: [https://tesseract-ocr.github.io/tessdoc/Installation.html](https://tesseract-ocr.github.io/tessdoc/Installation.html)
-*   The path to `tesseract.exe` (on Windows) or the Tesseract command might need to be configured in `recognition/ocr_mvp.py`. It is currently hardcoded as `r"C:\Program Files\Tesseract-OCR\tesseract.exe"`.
+*   The path to `tesseract.exe` (on Windows) or the Tesseract command might need to be configured in `recognition/ocr_mvp.py`.
 
 ### Python Dependencies
 *   Install dependencies using pip:
