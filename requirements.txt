@@ -1,2 +1,7 @@
 opencv-python
+pandas
 pytesseract
+Pillow
+numpy
+requests
+symspellpy==6.7.7
