@@ -1,6 +1,7 @@
 import os
 import platform # Added
 import cv2
+import time # Added for image capture delay
 import pandas as pd
 import pytesseract
 import tkinter as tk
@@ -15,6 +16,73 @@ from fuzzy_match import CardNameCorrector
 # Global Constants (if any specific ones are needed beyond defaults in main)
 # Example: CROP_RATIO_HEIGHT_START = 0.23 (if used by other functions externally)
 # For now, we assume these are mainly for extract_card_name_area and can be kept there or made local.
+
+# --- New Function: capture_images_from_camera ---
+def capture_images_from_camera(num_images: int = 10, delay_seconds: int = 3) -> list[str]:
+    """
+    Captures a specified number of images from the default camera with a delay.
+
+    Args:
+        num_images: The number of images to capture.
+        delay_seconds: The delay in seconds between captures.
+
+    Returns:
+        A list of filepaths for the captured images.
+        Returns an empty list if the camera cannot be opened or other errors occur.
+    """
+    # Initialize camera
+    camera = cv2.VideoCapture(0)  # 0 is usually the default camera
+    if not camera.isOpened():
+        print("Error: Could not open camera.")
+        return []
+
+    # Create directory for captured images
+    # Project root is assumed to be the parent of the 'recognition' directory
+    project_root = Path(__file__).resolve().parent.parent 
+    capture_dir = project_root / "captured_images"
+
+    if capture_dir.exists():
+        # Clear existing files in the directory
+        for item in capture_dir.iterdir():
+            if item.is_file():
+                os.remove(item)
+            # Optionally, remove subdirectories if needed, but problem description implies files
+    else:
+        os.makedirs(capture_dir, exist_ok=True)
+
+    captured_image_paths = []
+
+    print(f"Starting image capture: {num_images} images, {delay_seconds}s delay between each.")
+    for i in range(num_images):
+        ret, frame = camera.read()
+        if not ret:
+            print(f"Error: Could not capture frame {i+1}/{num_images}.")
+            continue  # Skip this capture if frame read fails
+
+        filename = f"capture_{i}.jpg"
+        filepath = capture_dir / filename
+        
+        try:
+            cv2.imwrite(str(filepath), frame)
+            captured_image_paths.append(str(filepath))
+            print(f"📸 Image captured and saved: {filepath}")
+        except Exception as e:
+            print(f"Error saving image {filepath}: {e}")
+            # Decide if we should stop or continue
+            continue
+
+        if i < num_images - 1: # Don't sleep after the last image
+            print(f"Waiting for {delay_seconds} seconds...")
+            time.sleep(delay_seconds)
+
+    # Release the camera
+    camera.release()
+    print("Camera released.")
+    
+    if not captured_image_paths:
+        print("No images were captured successfully.")
+    
+    return captured_image_paths
 
 # Default crop ratios used in extract_card_name_area
 # These can be defined as constants if they are intended to be fixed,
@@ -152,7 +220,8 @@ def process_image(image_path: str, corrector: CardNameCorrector, show_gui: bool 
 def main(image_dir: str = "tests/test_images",
          output_csv_file: str = "tests/test_carddata.csv",
          dict_path: str = "cards/card_names_symspell_clean.txt",
-         show_gui_flag: bool = True): # Added flag for GUI for easier testing
+         show_gui_flag: bool = True, # Added flag for GUI for easier testing
+         use_camera: bool = False): 
     
     # Ensure the dictionary path is correct relative to this script or an absolute path
     # If dict_path is relative like "cards/...", it's relative to CWD.
@@ -171,7 +240,6 @@ def main(image_dir: str = "tests/test_images",
         # This seems fine.
         pass
 
-
     try:
         corrector = CardNameCorrector(dictionary_path=dict_path)
     except FileNotFoundError as e:
@@ -179,20 +247,44 @@ def main(image_dir: str = "tests/test_images",
         print(f"Please ensure the dictionary file exists at: {os.path.abspath(dict_path)}")
         return
 
-    if not os.path.isdir(image_dir):
-        print(f"Error: Image directory not found at {os.path.abspath(image_dir)}")
-        return
+    image_paths_to_process = []
 
-    images = [img for img in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, img))]
+    if use_camera:
+        print("Attempting to use camera for image acquisition...")
+        # Assuming capture_images_from_camera() is defined in this file
+        # And it creates images in a known or returned location.
+        # The previous implementation of capture_images_from_camera takes num_images and delay_seconds
+        # Let's use its default parameters for now.
+        captured_image_files = capture_images_from_camera() 
+        if not captured_image_files:
+            print("Error: No images captured from camera, or camera not available.")
+            return
+        image_paths_to_process = captured_image_files
+        print(f"Successfully captured {len(image_paths_to_process)} images.")
+    else:
+        if not image_dir or not os.path.isdir(image_dir):
+            print(f"Error: Image directory '{image_dir}' not found or not specified.")
+            return
+        print(f"Using directory for image acquisition: {image_dir}")
+        # Ensure image_paths_to_process contains full paths
+        image_files_in_dir = [img for img in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, img))]
+        if not image_files_in_dir:
+            print(f"No image files found in directory: {image_dir}")
+            return
+        image_paths_to_process = [os.path.join(image_dir, img_name) for img_name in image_files_in_dir]
+
     all_card_data = []
 
-    for image_file_name in images:
-        full_path = os.path.join(image_dir, image_file_name)
+    if not image_paths_to_process:
+        print("No images to process.")
+        return
+
+    for full_path in image_paths_to_process: # Iterate over the collected full paths
         print(f"📸 Verarbeite: {full_path}")
         # Pass the show_gui_flag to process_image
         data = process_image(full_path, corrector, show_gui=show_gui_flag)
         
-        # Only add to CSV if there was no critical error and we have a card name (even if not corrected)
+        # Only add to CSV if there was no critical error
         # The test for process_image expects price/color to be None if card_name is empty.
         # We should add to CSV if processing happened, even if Scryfall found nothing.
         if data.get("error") is None: # Add if no load error
@@ -217,5 +309,25 @@ if __name__ == "__main__":
     # main(image_dir="path/to/your/images", 
     #      output_csv_file="path/to/your/output.csv",
     #      dict_path="path/to/your/dictionary.txt",
-    #      show_gui_flag=False) # For non-interactive runs
-    main(show_gui_flag=False) # Default paths, GUI off for potential automated runs
+    #      show_gui_flag=False,
+    #      use_camera=False) # Example with use_camera
+    
+    # Default paths, GUI off for potential automated runs
+    # main(show_gui_flag=False) 
+    
+    # Example: Run with camera
+    # main(show_gui_flag=False, use_camera=True, output_csv_file="tests/camera_carddata.csv")
+
+    # Example usage of the new function (optional, can be commented out)
+    # if __name__ == "__main__":
+    #     # Default run (from directory, GUI off)
+    #     # main(show_gui_flag=False)
+
+    #     # Run with camera input, no GUI, save to a different CSV
+    #     main(output_csv_file="tests/camera_output.csv", show_gui_flag=False, use_camera=True)
+        
+    #     # Test with specific image directory
+    #     # main(image_dir="path/to/your/images", show_gui_flag=False)
+
+    # Keep the original simple call for default behavior if no specific test is needed here.
+    main(show_gui_flag=False)

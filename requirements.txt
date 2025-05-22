@@ -1,7 +1,7 @@
-opencv-python
-pandas
-pytesseract
-Pillow
 numpy
+opencv-python>=4.0.0
+pandas
+Pillow
+pytesseract
 requests
 symspellpy==6.7.7

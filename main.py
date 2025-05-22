@@ -59,6 +59,12 @@ if __name__ == "__main__":
         help="Disable GUI image preview. If set, GUI will not be shown."
     )
 
+    parser.add_argument(
+        "-uc", "--use_camera", # Changed from --use-camera to --use_camera for consistency with attribute name
+        action="store_true",
+        help="Use the camera for image input instead of a directory. If set, --image_dir is ignored."
+    )
+
     args = parser.parse_args()
 
     # The `main` function in ocr_mvp.py expects `show_gui_flag`.
@@ -69,16 +75,18 @@ if __name__ == "__main__":
     
     print(f"Starting card processing with the following settings:")
     # Use os.path.abspath to show full paths for clarity
-    print(f"  Image Directory: {os.path.abspath(args.image_dir)}")
+    print(f"  Image Directory: {os.path.abspath(args.image_dir) if not args.use_camera else 'N/A (Camera input)'}")
     print(f"  Output CSV: {os.path.abspath(args.output_csv)}")
     print(f"  Dictionary Path: {os.path.abspath(args.dict_path)}")
     print(f"  Show GUI: {not args.no_gui}")
+    print(f"  Use Camera: {args.use_camera}")
 
     process_cards_main(
-        image_dir=args.image_dir,
+        image_dir=args.image_dir, # This will be ignored by ocr_mvp.main if use_camera is True
         output_csv_file=args.output_csv,
         dict_path=args.dict_path,
-        show_gui_flag=not args.no_gui
+        show_gui_flag=not args.no_gui,
+        use_camera=args.use_camera
     )
 
     print("Processing complete.")
