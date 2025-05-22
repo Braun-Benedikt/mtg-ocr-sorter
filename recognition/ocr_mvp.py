@@ -9,13 +9,14 @@ import numpy as np
 import requests
 from symspellpy.symspellpy import SymSpell, Verbosity
 
-from recognition.fuzzy_match import CardNameCorrector
+from .fuzzy_match import CardNameCorrector
 
 # Konfiguration
-dir_path = "tests/test_images"
-card_output = "tests/test_carddata.csv"
-dictionary_path = "cards/card_names_symspell_clean.txt"
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+base_path = Path(__file__).resolve().parent
+dir_path = base_path / "tests" / "test_images"
+card_output = base_path / "tests"/ "test_carddata.csv"
+dictionary_path = base_path / "cards" / "card_names_symspell_clean.txt"
+# pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 # OCR & Bildverarbeitung
 def extract_card_name_area(image: np.ndarray, crop_ratio_height: float = 0.3, crop_ratio_width: float = 0.8):
