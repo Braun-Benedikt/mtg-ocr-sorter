@@ -1,7 +1,9 @@
 import os
-import platform # Added
+import platform
 import cv2
-import time # Added for image capture delay
+import time
+import subprocess
+import tempfile
 import pandas as pd
 import pytesseract
 import tkinter as tk
@@ -13,11 +15,11 @@ from symspellpy.symspellpy import SymSpell, Verbosity
 
 from fuzzy_match import CardNameCorrector
 
+
 # Global Constants (if any specific ones are needed beyond defaults in main)
 # Example: CROP_RATIO_HEIGHT_START = 0.23 (if used by other functions externally)
 # For now, we assume these are mainly for extract_card_name_area and can be kept there or made local.
 
-# --- New Function: capture_images_from_camera ---
 def capture_images_from_camera(num_images: int = 10, delay_seconds: int = 3) -> list[str]:
     """
     Captures a specified number of images from the default camera with a delay.
@@ -28,17 +30,11 @@ def capture_images_from_camera(num_images: int = 10, delay_seconds: int = 3) -> 
 
     Returns:
         A list of filepaths for the captured images.
-        Returns an empty list if the camera cannot be opened or other errors occur.
+        Returns an empty list if the camera cannot be initialized or other errors occur.
     """
-    # Initialize camera
-    camera = cv2.VideoCapture(0)  # 0 is usually the default camera
-    if not camera.isOpened():
-        print("Error: Could not open camera.")
-        return []
-
     # Create directory for captured images
     # Project root is assumed to be the parent of the 'recognition' directory
-    project_root = Path(__file__).resolve().parent.parent 
+    project_root = Path(__file__).resolve().parent.parent
     capture_dir = project_root / "captured_images"
 
     if capture_dir.exists():
@@ -54,35 +50,43 @@ def capture_images_from_camera(num_images: int = 10, delay_seconds: int = 3) -> 
 
     print(f"Starting image capture: {num_images} images, {delay_seconds}s delay between each.")
     for i in range(num_images):
-        ret, frame = camera.read()
-        if not ret:
-            print(f"Error: Could not capture frame {i+1}/{num_images}.")
-            continue  # Skip this capture if frame read fails
-
         filename = f"capture_{i}.jpg"
         filepath = capture_dir / filename
-        
+        command = ['libcamera-still', '-o', str(filepath), '--nopreview']
+
         try:
-            cv2.imwrite(str(filepath), frame)
+            # Execute the command
+            result = subprocess.run(command, check=True, capture_output=True, text=True)
+            print(f"📸 Image captured and saved: {filepath} using libcamera-still.")
             captured_image_paths.append(str(filepath))
-            print(f"📸 Image captured and saved: {filepath}")
-        except Exception as e:
-            print(f"Error saving image {filepath}: {e}")
-            # Decide if we should stop or continue
+
+        except FileNotFoundError:
+            print("Error: libcamera-still command not found. Please ensure it is installed and in PATH.")
+            # If libcamera-still is not found, it's unlikely to work for other images, so break.
+            break
+        except subprocess.CalledProcessError as e:
+            print(f"Error executing libcamera-still for {filepath}: {e}")
+            if e.stdout:
+                print(f"STDOUT: {e.stdout}")
+            if e.stderr:
+                print(f"STDERR: {e.stderr}")
+            # Continue to the next image attempt
+            continue
+        except Exception as e:  # Catch any other unexpected errors during subprocess execution
+            print(f"An unexpected error occurred while trying to capture {filepath}: {e}")
             continue
 
-        if i < num_images - 1: # Don't sleep after the last image
+        if i < num_images - 1:  # Don't sleep after the last image
             print(f"Waiting for {delay_seconds} seconds...")
             time.sleep(delay_seconds)
 
-    # Release the camera
-    camera.release()
-    print("Camera released.")
-    
+    print("Finished camera capture attempts.")
+
     if not captured_image_paths:
         print("No images were captured successfully.")
-    
+
     return captured_image_paths
+
 
 # Default crop ratios used in extract_card_name_area
 # These can be defined as constants if they are intended to be fixed,
@@ -102,18 +106,20 @@ if platform.system() == "Windows":
         print(f"INFO: Tesseract executable not found at {tesseract_path}. Assuming it's in PATH.")
 # For other OS, assume Tesseract is in PATH and no specific command is needed.
 
-# Konfiguration
+# Configuration
 base_path = Path(__file__).resolve().parent
 dir_path = base_path / "tests" / "test_images"
-card_output = base_path / "tests"/ "test_carddata.csv"
+card_output = base_path / "tests" / "test_carddata.csv"
 dictionary_path = base_path / "cards" / "card_names_symspell_clean.txt"
 
+
 # OCR & Bildverarbeitung
-def extract_card_name_area(image: np.ndarray, 
-                           hr_start: float = CROP_RATIO_HEIGHT_START, hr_end: float = CROP_RATIO_HEIGHT_END, 
+def extract_card_name_area(image: np.ndarray,
+                           hr_start: float = CROP_RATIO_HEIGHT_START, hr_end: float = CROP_RATIO_HEIGHT_END,
                            wr_start: float = CROP_RATIO_WIDTH_START, wr_end: float = CROP_RATIO_WIDTH_END):
     h, w = image.shape[:2]
     return image[int(h * hr_start):int(h * hr_end), int(w * wr_start):int(w * wr_end)]
+
 
 def extract_card_name(image: np.ndarray, corrector) -> tuple[str, str]:
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -135,18 +141,21 @@ def extract_card_name(image: np.ndarray, corrector) -> tuple[str, str]:
 
     return ocr_raw.strip(), best_term if best_term else ""
 
+
 def load_image_cv2(path: str) -> np.ndarray:
     image = cv2.imread(path)
     if image is None:
         # The test expects "Image not found or unable to read"
-        raise ValueError(f"Image not found or unable to read: {path}") 
+        raise ValueError(f"Image not found or unable to read: {path}")
     return image
+
 
 def cv2_to_tk(image: np.ndarray):
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     pil_img = Image.fromarray(image_rgb)
     pil_img = pil_img.resize((400, int(pil_img.height * 400 / pil_img.width)))
     return ImageTk.PhotoImage(pil_img)
+
 
 def fetch_card_information(card_name):
     url = f"https://api.scryfall.com/cards/named?exact={card_name}"
@@ -161,6 +170,7 @@ def fetch_card_information(card_name):
     except Exception as e:
         print(f"⚠️ Fehler bei API für {card_name}: {e}")
         return None
+
 
 def show_image_gui(original, cropped, ocr_raw, ocr_corrected):
     root = tk.Tk()
@@ -183,6 +193,7 @@ def show_image_gui(original, cropped, ocr_raw, ocr_corrected):
     result_label.pack(pady=20)
     root.mainloop()
 
+
 def process_image(image_path: str, corrector: CardNameCorrector, show_gui: bool = True):
     try:
         image_cv = load_image_cv2(image_path)
@@ -197,7 +208,7 @@ def process_image(image_path: str, corrector: CardNameCorrector, show_gui: bool 
             "error": str(e)
         }
 
-    cropped = extract_card_name_area(image_cv) # Uses default ratios from constants
+    cropped = extract_card_name_area(image_cv)  # Uses default ratios from constants
     ocr_raw, ocr_corrected = extract_card_name(cropped, corrector)
 
     if show_gui:
@@ -205,24 +216,24 @@ def process_image(image_path: str, corrector: CardNameCorrector, show_gui: bool 
         show_image_gui(image_cv, cropped, ocr_raw if ocr_raw else "N/A", ocr_corrected if ocr_corrected else "N/A")
 
     card_info_data = None
-    if ocr_corrected: # Only fetch info if we have a corrected name
+    if ocr_corrected:  # Only fetch info if we have a corrected name
         card_info_data = fetch_card_information(ocr_corrected)
-    
+
     return {
         "image_path": image_path,
         "ocr_name_raw": ocr_raw,
         "card_name": ocr_corrected,
         "price": card_info_data[0] if card_info_data else None,
         "color_identity": card_info_data[1] if card_info_data else None,
-        "error": None # Explicitly set error to None if successful
+        "error": None  # Explicitly set error to None if successful
     }
+
 
 def main(image_dir: str = "tests/test_images",
          output_csv_file: str = "tests/test_carddata.csv",
          dict_path: str = "cards/card_names_symspell_clean.txt",
-         show_gui_flag: bool = True, # Added flag for GUI for easier testing
-         use_camera: bool = False): 
-    
+         show_gui_flag: bool = True,  # Added flag for GUI for easier testing
+         use_camera: bool = False):
     # Ensure the dictionary path is correct relative to this script or an absolute path
     # If dict_path is relative like "cards/...", it's relative to CWD.
     # If ocr_mvp.py is in recognition/, then "cards/" is ../recognition/cards if CWD is project root
@@ -230,8 +241,8 @@ def main(image_dir: str = "tests/test_images",
     # For consistency, let's assume dict_path is relative to project root or absolute.
     # The CardNameCorrector expects an absolute path or path relative to its own location.
     # Let's try to make it more robust by resolving from script location if relative.
-    
-    script_dir = os.path.dirname(__file__) # Directory of ocr_mvp.py
+
+    script_dir = os.path.dirname(__file__)  # Directory of ocr_mvp.py
     if not os.path.isabs(dict_path) and dict_path.startswith("cards/"):
         # This assumes "cards/" is a subdir relative to where fuzzy_match.py (and thus CardNameCorrector) is.
         # CardNameCorrector itself handles `../recognition/cards` structure.
@@ -255,7 +266,7 @@ def main(image_dir: str = "tests/test_images",
         # And it creates images in a known or returned location.
         # The previous implementation of capture_images_from_camera takes num_images and delay_seconds
         # Let's use its default parameters for now.
-        captured_image_files = capture_images_from_camera() 
+        captured_image_files = capture_images_from_camera()
         if not captured_image_files:
             print("Error: No images captured from camera, or camera not available.")
             return
@@ -279,16 +290,16 @@ def main(image_dir: str = "tests/test_images",
         print("No images to process.")
         return
 
-    for full_path in image_paths_to_process: # Iterate over the collected full paths
+    for full_path in image_paths_to_process:  # Iterate over the collected full paths
         print(f"📸 Verarbeite: {full_path}")
         # Pass the show_gui_flag to process_image
         data = process_image(full_path, corrector, show_gui=show_gui_flag)
-        
+
         # Only add to CSV if there was no critical error
         # The test for process_image expects price/color to be None if card_name is empty.
         # We should add to CSV if processing happened, even if Scryfall found nothing.
-        if data.get("error") is None: # Add if no load error
-             all_card_data.append(data)
+        if data.get("error") is None:  # Add if no load error
+            all_card_data.append(data)
         # If card_name is empty, price and color will be None. This is fine.
 
     if not all_card_data:
@@ -296,7 +307,7 @@ def main(image_dir: str = "tests/test_images",
         return
 
     df = pd.DataFrame(all_card_data)
-    
+
     try:
         df.to_csv(output_csv_file, index=False)
         print(f"✅ CSV geschrieben: {os.path.abspath(output_csv_file)}")
@@ -306,15 +317,15 @@ def main(image_dir: str = "tests/test_images",
 
 if __name__ == "__main__":
     # Example of how to run with non-default paths:
-    # main(image_dir="path/to/your/images", 
+    # main(image_dir="path/to/your/images",
     #      output_csv_file="path/to/your/output.csv",
     #      dict_path="path/to/your/dictionary.txt",
     #      show_gui_flag=False,
     #      use_camera=False) # Example with use_camera
-    
+
     # Default paths, GUI off for potential automated runs
-    # main(show_gui_flag=False) 
-    
+    # main(show_gui_flag=False)
+
     # Example: Run with camera
     # main(show_gui_flag=False, use_camera=True, output_csv_file="tests/camera_carddata.csv")
 
@@ -325,7 +336,7 @@ if __name__ == "__main__":
 
     #     # Run with camera input, no GUI, save to a different CSV
     #     main(output_csv_file="tests/camera_output.csv", show_gui_flag=False, use_camera=True)
-        
+
     #     # Test with specific image directory
     #     # main(image_dir="path/to/your/images", show_gui_flag=False)
 

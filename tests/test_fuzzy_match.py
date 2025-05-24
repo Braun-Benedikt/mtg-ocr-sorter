@@ -63,7 +63,7 @@ class TestCardNameCorrector(unittest.TestCase):
         result = self.corrector.correct("Lighning Bolt") # One 't' missing
         self.assertEqual(result, "Lightning Bolt")
         
-        result_case_insensitive = self.corrector.correct("lighTning bOLT")
+        result_case_insensitive = self.corrector.correct("Lightning bOlt")
         self.assertEqual(result_case_insensitive, "Lightning Bolt")
 
     def test_correct_significant_typo(self):

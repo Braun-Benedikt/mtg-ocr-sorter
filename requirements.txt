@@ -5,3 +5,10 @@ Pillow
 pytesseract
 requests
 symspellpy==6.7.7
+
+# For Raspberry Pi users:
+# This project uses libcamera-still for camera access when the --use_camera flag is active.
+# Please ensure libcamera-utils (which includes libcamera-still) is installed on your system.
+# You can typically install it using:
+# sudo apt update
+# sudo apt install libcamera-utils
