@@ -20,72 +20,50 @@ from fuzzy_match import CardNameCorrector
 # Example: CROP_RATIO_HEIGHT_START = 0.23 (if used by other functions externally)
 # For now, we assume these are mainly for extract_card_name_area and can be kept there or made local.
 
-def capture_images_from_camera(num_images: int = 10, delay_seconds: int = 3) -> list[str]:
+def capture_images_from_camera() -> str | None:
     """
-    Captures a specified number of images from the default camera with a delay.
+    Captures a single image from the default camera.
 
-    Args:
-        num_images: The number of images to capture.
-        delay_seconds: The delay in seconds between captures.
+    The image is saved as "current_capture.jpg" in the "captured_images" directory,
+    which is created if it doesn't exist. The directory is not cleared by this function.
 
     Returns:
-        A list of filepaths for the captured images.
-        Returns an empty list if the camera cannot be initialized or other errors occur.
+        The full filepath string of the captured image if successful.
+        None if any error occurs (e.g., libcamera-still not found, command execution error).
     """
     # Create directory for captured images
     # Project root is assumed to be the parent of the 'recognition' directory
     project_root = Path(__file__).resolve().parent.parent
     capture_dir = project_root / "captured_images"
 
-    if capture_dir.exists():
-        # Clear existing files in the directory
-        for item in capture_dir.iterdir():
-            if item.is_file():
-                os.remove(item)
-            # Optionally, remove subdirectories if needed, but problem description implies files
-    else:
-        os.makedirs(capture_dir, exist_ok=True)
+    # Create the directory if it doesn't exist, but do not clear it.
+    os.makedirs(capture_dir, exist_ok=True)
 
-    captured_image_paths = []
+    filename = "current_capture.jpg"
+    filepath = capture_dir / filename
+    command = ['libcamera-still', '-o', str(filepath), '--nopreview']
 
-    print(f"Starting image capture: {num_images} images, {delay_seconds}s delay between each.")
-    for i in range(num_images):
-        filename = f"capture_{i}.jpg"
-        filepath = capture_dir / filename
-        command = ['libcamera-still', '-o', str(filepath), '--nopreview']
+    print(f"Attempting to capture image to: {filepath}")
 
-        try:
-            # Execute the command
-            result = subprocess.run(command, check=True, capture_output=True, text=True)
-            print(f"📸 Image captured and saved: {filepath} using libcamera-still.")
-            captured_image_paths.append(str(filepath))
+    try:
+        # Execute the command
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        print(f"📸 Image captured and saved: {filepath} using libcamera-still.")
+        return str(filepath)
 
-        except FileNotFoundError:
-            print("Error: libcamera-still command not found. Please ensure it is installed and in PATH.")
-            # If libcamera-still is not found, it's unlikely to work for other images, so break.
-            break
-        except subprocess.CalledProcessError as e:
-            print(f"Error executing libcamera-still for {filepath}: {e}")
-            if e.stdout:
-                print(f"STDOUT: {e.stdout}")
-            if e.stderr:
-                print(f"STDERR: {e.stderr}")
-            # Continue to the next image attempt
-            continue
-        except Exception as e:  # Catch any other unexpected errors during subprocess execution
-            print(f"An unexpected error occurred while trying to capture {filepath}: {e}")
-            continue
-
-        if i < num_images - 1:  # Don't sleep after the last image
-            print(f"Waiting for {delay_seconds} seconds...")
-            time.sleep(delay_seconds)
-
-    print("Finished camera capture attempts.")
-
-    if not captured_image_paths:
-        print("No images were captured successfully.")
-
-    return captured_image_paths
+    except FileNotFoundError:
+        print("Error: libcamera-still command not found. Please ensure it is installed and in PATH.")
+        return None
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing libcamera-still for {filepath}: {e}")
+        if e.stdout:
+            print(f"STDOUT: {e.stdout}")
+        if e.stderr:
+            print(f"STDERR: {e.stderr}")
+        return None
+    except Exception as e:  # Catch any other unexpected errors during subprocess execution
+        print(f"An unexpected error occurred while trying to capture {filepath}: {e}")
+        return None
 
 
 # Default crop ratios used in extract_card_name_area
@@ -258,52 +236,82 @@ def main(image_dir: str = "tests/test_images",
         print(f"Please ensure the dictionary file exists at: {os.path.abspath(dict_path)}")
         return
 
-    image_paths_to_process = []
+    all_card_data = []
 
     if use_camera:
         print("Attempting to use camera for image acquisition...")
-        # Assuming capture_images_from_camera() is defined in this file
-        # And it creates images in a known or returned location.
-        # The previous implementation of capture_images_from_camera takes num_images and delay_seconds
-        # Let's use its default parameters for now.
-        captured_image_files = capture_images_from_camera()
-        if not captured_image_files:
-            print("Error: No images captured from camera, or camera not available.")
-            return
-        image_paths_to_process = captured_image_files
-        print(f"Successfully captured {len(image_paths_to_process)} images.")
-    else:
+        project_root = Path(__file__).resolve().parent.parent
+        capture_dir = project_root / "captured_images"
+
+        # Create the directory if it doesn't exist
+        os.makedirs(capture_dir, exist_ok=True)
+
+        # Clear existing files in the directory
+        print(f"Clearing existing files in {capture_dir}...")
+        for item in capture_dir.iterdir():
+            if item.is_file():
+                try:
+                    os.remove(item)
+                    print(f"Removed {item}")
+                except OSError as e:
+                    print(f"Error removing file {item}: {e}")
+
+        print("Starting camera capture loop...")
+        while True:
+            captured_image_path = capture_images_from_camera()
+
+            if captured_image_path:
+                print(f"📸 Processing captured image: {captured_image_path}")
+                data = process_image(captured_image_path, corrector, show_gui=show_gui_flag)
+
+                # Add to all_card_data regardless of error, process_image handles error reporting internally
+                # but we only stop if card_name is not found.
+                all_card_data.append(data)  # Append data even if it contains an error from process_image
+
+                if data.get("error"):  # If process_image itself had an error (e.g. file not found after capture)
+                    print(f"Error processing {captured_image_path}. See details above. Stopping capture.")
+                    break
+
+                card_name = data.get("card_name")
+                if not card_name:
+                    print("ℹ️ No card name recognized, stopping capture.")
+                    break
+                else:
+                    print(f"Recognized card: {card_name}. Continuing capture...")
+            else:
+                print("⚠️ Camera capture failed, stopping process.")
+                break  # Exit loop if camera capture fails
+
+            print("Waiting for 1 second before next capture...")
+            time.sleep(1)  # Delay for camera cooldown or card repositioning
+
+    else:  # Not use_camera: process from directory
         if not image_dir or not os.path.isdir(image_dir):
             print(f"Error: Image directory '{image_dir}' not found or not specified.")
             return
         print(f"Using directory for image acquisition: {image_dir}")
-        # Ensure image_paths_to_process contains full paths
+
+        image_paths_to_process = []
         image_files_in_dir = [img for img in os.listdir(image_dir) if os.path.isfile(os.path.join(image_dir, img))]
         if not image_files_in_dir:
             print(f"No image files found in directory: {image_dir}")
             return
         image_paths_to_process = [os.path.join(image_dir, img_name) for img_name in image_files_in_dir]
 
-    all_card_data = []
+        if not image_paths_to_process:
+            print("No images to process from directory.")
+            return
 
-    if not image_paths_to_process:
-        print("No images to process.")
-        return
-
-    for full_path in image_paths_to_process:  # Iterate over the collected full paths
-        print(f"📸 Verarbeite: {full_path}")
-        # Pass the show_gui_flag to process_image
-        data = process_image(full_path, corrector, show_gui=show_gui_flag)
-
-        # Only add to CSV if there was no critical error
-        # The test for process_image expects price/color to be None if card_name is empty.
-        # We should add to CSV if processing happened, even if Scryfall found nothing.
-        if data.get("error") is None:  # Add if no load error
-            all_card_data.append(data)
-        # If card_name is empty, price and color will be None. This is fine.
+        for full_path in image_paths_to_process:
+            print(f"📸 Verarbeite: {full_path}")
+            data = process_image(full_path, corrector, show_gui=show_gui_flag)
+            # Add to CSV if no critical error during image loading in process_image
+            if data.get("error") is None or "Image not found or unable to read" not in data.get("error", ""):
+                all_card_data.append(data)
+            # If card_name is empty, price and color will be None. This is fine.
 
     if not all_card_data:
-        print("No card data processed or to write.")
+        print("No card data processed or to write to CSV.")
         return
 
     df = pd.DataFrame(all_card_data)
