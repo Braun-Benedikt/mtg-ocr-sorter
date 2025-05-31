@@ -6,8 +6,8 @@ import subprocess
 import tempfile
 import pandas as pd # Keep for now, might be removed if no other part uses it
 import pytesseract
-# import tkinter as tk # Temporarily commented out to avoid import errors in GUI-less environment
-# from PIL import Image, ImageTk # Temporarily commented out due to tkinter dependency
+import tkinter as tk
+from PIL import Image, ImageTk
 from pathlib import Path
 import numpy as np
 import requests
@@ -80,37 +80,16 @@ def setup_crop_interactively():
         print("Error: Could not load or create an image for ROI selection.")
         return
 
-    # cv2.imshow("Select Crop Area", image)
-    # print("Select the card name area by drawing a rectangle, then press ENTER or SPACE.")
-    # print("Press C to cancel selection.")
+    cv2.imshow("Select Crop Area", image)
+    print("Select the card name area by drawing a rectangle, then press ENTER or SPACE.")
+    print("Press C to cancel selection.")
 
     # Ensure the window is brought to the front if possible (platform dependent)
-    # cv2.setWindowProperty("Select Crop Area", cv2.WND_PROP_TOPMOST, 1)
-    # cv2.waitKey(1) # Necessary to ensure window is updated and can be focused
+    cv2.setWindowProperty("Select Crop Area", cv2.WND_PROP_TOPMOST, 1)
+    cv2.waitKey(1) # Necessary to ensure window is updated and can be focused
 
-    # # r = cv2.selectROI("Select Crop Area", image, showCrosshair=True, fromCenter=False)
-    # # cv2.destroyAllWindows() # Close the window immediately after selection or cancellation
-
-    # Simulate ROI selection for environment without GUI interaction
-    # These values are chosen to match the expectations in test_crop_setup.py
-    # based on the 480x680 dummy image created in this function if camera fails.
-    # test_crop_setup.py expects: HS=0.10, HE=0.20, WS=0.15, WE=0.25
-    # H_sim = 480, W_sim = 680
-    # y = 0.10 * 480 = 48
-    # h = (0.20 * 480) - y = 96 - 48 = 48
-    # x = 0.15 * 680 = 102
-    # w = (0.25 * 680) - x = 170 - 102 = 68
-    sim_r = (102, 48, 68, 48)
-    print(f"SIMULATING ROI SELECTION with r = {sim_r} to align with test_crop_setup.py expectations.")
-    r = sim_r
-    # Simulate closing related windows if any were opened by selectROI, though we bypassed it.
-    # It's good practice if any part of cv2.imshow might have left a window.
-    # However, the original destroyAllWindows() was tied to selectROI.
-    # For this simulation, ensure all OpenCV windows are closed if any were created by imshow.
-    # If imshow itself is problematic without a display, this might need further adjustment.
-    # For now, assume imshow is non-blocking or handles no-display gracefully.
-    # cv2.destroyAllWindows() # All GUI calls are removed for this version.
-
+    r = cv2.selectROI("Select Crop Area", image, showCrosshair=True, fromCenter=False)
+    cv2.destroyAllWindows() # Close the window immediately after selection or cancellation
 
     if r is None or not any(r): # r will be (0,0,0,0) if 'c' or Esc is pressed, or window closed.
         print("ROI selection cancelled or window closed. Crop ratios not updated.")
@@ -241,12 +220,10 @@ def load_image_cv2(path: str) -> np.ndarray | None:
 
 
 def cv2_to_tk(image: np.ndarray):
-    # image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB) # PIL-DEPENDENT
-    # pil_img = Image.fromarray(image_rgb) # PIL-DEPENDENT
-    # pil_img = pil_img.resize((400, int(pil_img.height * 400 / pil_img.width))) # PIL-DEPENDENT
-    # return ImageTk.PhotoImage(pil_img) # PIL-DEPENDENT (and TKINTER-DEPENDENT)
-    print("cv2_to_tk: Functionality disabled due to PIL.ImageTk import removal.")
-    return None
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    pil_img = Image.fromarray(image_rgb)
+    pil_img = pil_img.resize((400, int(pil_img.height * 400 / pil_img.width)))
+    return ImageTk.PhotoImage(pil_img)
 
 
 def fetch_card_information(card_name):
@@ -270,12 +247,10 @@ def show_image_gui(original, cropped, ocr_raw, ocr_corrected):
     # It should ideally be conditionally called or removed if running in a headless server context.
     # For now, it's kept but will only be called if show_gui_flag is True.
     try:
-        # root = tk.Tk() # TKINTER-DEPENDENT
-        # root.title("Magic-Karte OCR-Vorschau") # TKINTER-DEPENDENT
-        print("show_image_gui: Tkinter GUI is currently disabled due to import removal.") # TKINTER-DEPENDENT
-        return # TKINTER-DEPENDENT - Exit function as it can't proceed
+        root = tk.Tk()
+        root.title("Magic-Karte OCR-Vorschau")
 
-        tk_img1 = cv2_to_tk(original) # This line would be fine if tk were available
+        tk_img1 = cv2_to_tk(original)
         label1 = tk.Label(root, image=tk_img1, text="Original", compound="top")
         label1.pack(padx=10, pady=10)
 
@@ -291,8 +266,10 @@ def show_image_gui(original, cropped, ocr_raw, ocr_corrected):
         )
         result_label.pack(pady=20)
         root.mainloop()
-    except tk.TclError as e:
+    except tk.TclError as e: # Catches errors like $DISPLAY not being set
         print(f"Tkinter GUI error: {e}. GUI might not be available in this environment.")
+    except NameError as e: # If tk was not imported (should not happen with restored imports)
+        print(f"show_image_gui error: {e}. Tkinter might not be imported.")
 
 
 def process_image_to_db(image_path: str, corrector: CardNameCorrector, show_gui: bool = False):
