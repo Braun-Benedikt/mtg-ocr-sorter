@@ -1,35 +1,63 @@
 import os
-import sys
-from flask import Flask, jsonify, request, send_file, render_template # Added render_template
+import sys # Crucial import
+from flask import Flask, jsonify, request, send_file, render_template
 from werkzeug.utils import secure_filename
 import io
 import csv
-from pathlib import Path
+from pathlib import Path # Crucial import
+import subprocess # For libcamera-still check in if __name__ == '__main__'
 
-project_root = Path(__file__).resolve().parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+# --- sys.path modification ---
+# This logic assumes app.py is located inside the 'web_app' directory.
+# Correctly identify project root:
+# app_file_path will be /path/to/project_root/web_app/app.py
+# web_app_folder will be /path/to/project_root/web_app
+# project_root_folder will be /path/to/project_root
+app_file_path = Path(__file__).resolve()
+web_app_folder = app_file_path.parent
+project_root_folder = web_app_folder.parent
 
+# Add project_root_folder to sys.path if it's not already there.
+# This allows imports like 'from recognition.ocr_mvp import ...'
+if str(project_root_folder) not in sys.path:
+    sys.path.insert(0, str(project_root_folder))
+# --- End sys.path modification ---
+
+# Now, project-specific imports
 try:
     from web_app.database import init_db, add_card, get_cards
-except ModuleNotFoundError:
-    print("ERROR: Could not import database module from web_app.database.")
+except ModuleNotFoundError as e:
+    print(f"ERROR: Could not import database module from web_app.database: {e}")
+    print(f"Project root: {project_root_folder}, sys.path: {sys.path}")
+    # Define dummy functions if import fails, so the script can still be imported
     def init_db(): print("DUMMY init_db: web_app.database not found")
     def add_card(name, **kwargs): print(f"DUMMY add_card: {name}"); return None
     def get_cards(**kwargs): print("DUMMY get_cards"); return []
 
 try:
     from recognition.ocr_mvp import capture_images_from_camera, process_image_to_db, CardNameCorrector
-    DEFAULT_DICT_PATH = str(project_root / "recognition" / "cards" / "card_names_symspell_clean.txt")
-except ModuleNotFoundError:
-    print("ERROR: Could not import from recognition.ocr_mvp.")
+    # Define DEFAULT_DICT_PATH using project_root_folder, AFTER project_root_folder is defined.
+    DEFAULT_DICT_PATH = str(project_root_folder / "recognition" / "cards" / "card_names_symspell_clean.txt")
+except ModuleNotFoundError as e:
+    print(f"ERROR: Could not import from recognition.ocr_mvp: {e}")
+    print(f"Project root: {project_root_folder}, sys.path: {sys.path}")
+    # Define dummy functions
     def capture_images_from_camera(): print("DUMMY capture_images_from_camera"); return None
     def process_image_to_db(img_path, corrector, show_gui): print(f"DUMMY process_image_to_db: {img_path}"); return None
-    class CardNameCorrector:
+    class CardNameCorrector: # Dummy class
         def __init__(self, dictionary_path):
             print(f"DUMMY CardNameCorrector initialized with {dictionary_path}")
+            # Attempt to create a dummy dictionary if the specified one isn't found during dummy init
+            # This helps avoid a crash if the main init_db for corrector fails later due to missing dict.
+            dict_dir = os.path.dirname(dictionary_path)
+            if dict_dir and not os.path.exists(dict_dir): # Ensure base directory exists
+                os.makedirs(dict_dir, exist_ok=True)
             if not os.path.exists(dictionary_path):
-                 print(f"Warning: Dummy CardNameCorrector - dictionary not found at {dictionary_path}")
+                 print(f"Warning: Dummy CardNameCorrector - dictionary not found at {dictionary_path}. Creating placeholder.")
+                 try:
+                     with open(dictionary_path, 'w') as f: f.write("dummyocr\n")
+                 except Exception as ex_write:
+                     print(f"Could not write placeholder dictionary for dummy: {ex_write}")
 
 app = Flask(__name__) # static_folder='static', template_folder='templates' are default if named so
 
@@ -106,7 +134,7 @@ def export_cards_csv():
     return send_file(mem_csv, as_attachment=True, download_name='scanned_cards.csv', mimetype='text/csv')
 
 if __name__ == '__main__':
-    dict_dir = project_root / "recognition" / "cards"
+    dict_dir = project_root_folder / "recognition" / "cards"
     os.makedirs(dict_dir, exist_ok=True)
     dummy_dict_for_local_run = dict_dir / "card_names_symspell_clean.txt"
     if not dummy_dict_for_local_run.exists():
