@@ -56,6 +56,87 @@ if platform.system() == "Windows":
 dictionary_path_default = project_root / "recognition" / "cards" / "card_names_symspell_clean.txt"
 
 
+def setup_crop_interactively():
+    """
+    Allows the user to interactively select a crop area on an image (captured or dummy)
+    and updates the global crop ratio constants.
+    """
+    image_path = capture_images_from_camera()
+    image = None
+
+    if image_path:
+        image = cv2.imread(image_path)
+        if image is None:
+            print(f"Failed to read captured image from {image_path}. Using fallback dummy image.")
+            # Fall through to dummy image creation if imread fails
+
+    if image is None: # If capture failed or reading failed
+        print("Using fallback dummy image for ROI selection.")
+        image = np.zeros((480, 680, 3), dtype=np.uint8) # Black image HxW
+        cv2.putText(image, "Please select the card name area.", (50, 240),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+
+    if image is None: # Should not happen if dummy image logic is correct
+        print("Error: Could not load or create an image for ROI selection.")
+        return
+
+    cv2.imshow("Select Crop Area", image)
+    print("Select the card name area by drawing a rectangle, then press ENTER or SPACE.")
+    print("Press C to cancel selection.")
+
+    # Ensure the window is brought to the front if possible (platform dependent)
+    cv2.setWindowProperty("Select Crop Area", cv2.WND_PROP_TOPMOST, 1)
+    cv2.waitKey(1) # Necessary to ensure window is updated and can be focused
+
+    r = cv2.selectROI("Select Crop Area", image, showCrosshair=True, fromCenter=False)
+    cv2.destroyAllWindows() # Close the window immediately after selection or cancellation
+
+    if r is None or not any(r): # r will be (0,0,0,0) if 'c' or Esc is pressed, or window closed.
+        print("ROI selection cancelled or window closed. Crop ratios not updated.")
+        return
+
+    x, y, w, h = r
+    if w == 0 or h == 0:
+        print("No area selected (width or height is zero). Crop ratios not updated.")
+        return
+
+    img_h, img_w = image.shape[:2]
+    if img_h == 0 or img_w == 0:
+        print("Error: Image dimensions are zero. Cannot calculate ratios.")
+        return
+
+    # Calculate new ratios
+    new_hr_start = y / img_h
+    new_hr_end = (y + h) / img_h
+    new_wr_start = x / img_w
+    new_wr_end = (x + w) / img_w
+
+    # Update global variables
+    # Note: This updates globals only within this module (ocr_mvp.py).
+    # If other modules import these constants directly, they might not see the change
+    # unless they re-import or access them through a function in this module.
+    global CROP_RATIO_HEIGHT_START, CROP_RATIO_HEIGHT_END, CROP_RATIO_WIDTH_START, CROP_RATIO_WIDTH_END
+    CROP_RATIO_HEIGHT_START = new_hr_start
+    CROP_RATIO_HEIGHT_END = new_hr_end
+    CROP_RATIO_WIDTH_START = new_wr_start
+    CROP_RATIO_WIDTH_END = new_wr_end
+
+    # Alternative using globals().update() if preferred, though direct assignment is clearer for defined globals
+    # globals().update({
+    #     'CROP_RATIO_HEIGHT_START': new_hr_start,
+    #     'CROP_RATIO_HEIGHT_END': new_hr_end,
+    #     'CROP_RATIO_WIDTH_START': new_wr_start,
+    #     'CROP_RATIO_WIDTH_END': new_wr_end
+    # })
+
+    print("\n--- Crop Ratios Updated ---")
+    print(f"CROP_RATIO_HEIGHT_START = {CROP_RATIO_HEIGHT_START:.4f}")
+    print(f"CROP_RATIO_HEIGHT_END = {CROP_RATIO_HEIGHT_END:.4f}")
+    print(f"CROP_RATIO_WIDTH_START = {CROP_RATIO_WIDTH_START:.4f}")
+    print(f"CROP_RATIO_WIDTH_END = {CROP_RATIO_WIDTH_END:.4f}")
+    print("---------------------------\n")
+
+
 def capture_images_from_camera() -> str | None:
     capture_dir = project_root / "captured_images"
     os.makedirs(capture_dir, exist_ok=True)
@@ -82,10 +163,24 @@ def capture_images_from_camera() -> str | None:
 
 
 def extract_card_name_area(image: np.ndarray,
-                           hr_start: float = CROP_RATIO_HEIGHT_START, hr_end: float = CROP_RATIO_HEIGHT_END,
-                           wr_start: float = CROP_RATIO_WIDTH_START, wr_end: float = CROP_RATIO_WIDTH_END):
+                           hr_start: float = None, hr_end: float = None,
+                           wr_start: float = None, wr_end: float = None):
+    """
+    Extracts the card name area from an image using specified ratios.
+    If ratios are not provided, it uses the current global CROP_RATIO_* constants from the module.
+    """
     h, w = image.shape[:2]
-    return image[int(h * hr_start):int(h * hr_end), int(w * wr_start):int(w * wr_end)]
+
+    # Use current global values if specific ratios are not provided
+    # These local variables will hold the ratios to be used.
+    actual_hr_start = hr_start if hr_start is not None else CROP_RATIO_HEIGHT_START
+    actual_hr_end = hr_end if hr_end is not None else CROP_RATIO_HEIGHT_END
+    actual_wr_start = wr_start if wr_start is not None else CROP_RATIO_WIDTH_START
+    actual_wr_end = wr_end if wr_end is not None else CROP_RATIO_WIDTH_END
+
+    cropped_img = image[int(h * actual_hr_start):int(h * actual_hr_end), int(w * actual_wr_start):int(w * actual_wr_end)]
+
+    return cropped_img
 
 
 def extract_card_name(image: np.ndarray, corrector) -> tuple[str, str]:
@@ -171,8 +266,10 @@ def show_image_gui(original, cropped, ocr_raw, ocr_corrected):
         )
         result_label.pack(pady=20)
         root.mainloop()
-    except tk.TclError as e:
+    except tk.TclError as e: # Catches errors like $DISPLAY not being set
         print(f"Tkinter GUI error: {e}. GUI might not be available in this environment.")
+    except NameError as e: # If tk was not imported (should not happen with restored imports)
+        print(f"show_image_gui error: {e}. Tkinter might not be imported.")
 
 
 def process_image_to_db(image_path: str, corrector: CardNameCorrector, show_gui: bool = False):
