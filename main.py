@@ -9,7 +9,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 try:
-    from recognition.ocr_mvp import main_process_entries, init_db as ocr_init_db
+    from recognition.ocr_mvp import main_process_entries, init_db as ocr_init_db, setup_crop_interactively
     from web_app.database import init_db as webapp_init_db
 except ModuleNotFoundError as e:
     print(f"Failed to import modules: {e}")
@@ -63,7 +63,27 @@ if __name__ == "__main__":
         help="Initialize the database before processing."
     )
 
+    parser.add_argument(
+        "--configure_crop",
+        action="store_true",
+        help="Run interactive crop configuration tool."
+    )
+
     args = parser.parse_args()
+
+    if args.configure_crop:
+        print("Running interactive crop configuration tool...")
+        setup_crop_interactively()
+        # At this point, global crop ratios in ocr_mvp should be updated.
+        # The user might be instructed by the tool to restart the main processing if they want to use new ratios.
+        # Or, we can ask the user if they want to proceed with processing.
+        # For now, let's just print a message and proceed.
+        # If setup_crop_interactively handles its own errors/user exit, flow will continue here.
+        print("Crop configuration finished. Proceeding with main script...")
+        # Optionally, could add:
+        # if not confirm_proceed("Do you want to continue with processing?"):
+        #     sys.exit("User chose to exit after crop configuration.")
+
 
     if args.init_db:
         print("Initializing database (called from main.py)...")
