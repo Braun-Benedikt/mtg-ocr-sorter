@@ -11,4 +11,5 @@ symspellpy==6.7.7
 # Please ensure libcamera-utils (which includes libcamera-still) is installed on your system.
 # You can typically install it using:
 # sudo apt update
-# sudo apt install libcamera-utils
+# sudo apt install libcamera-utilsFlask
+editdistpy

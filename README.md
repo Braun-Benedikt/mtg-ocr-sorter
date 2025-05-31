@@ -59,3 +59,40 @@ The card dictionary is essential for the fuzzy name correction. To generate it:
 *   Integration with a Raspberry Pi and a physical card sorting machine.
 *   Development of `main.py` as the primary application interface.
 *   Improved error handling and configuration options.
+
+## Web Interface Setup and Usage
+
+The project now includes a web interface to interact with the card scanner.
+
+### Prerequisites
+
+Ensure all dependencies are installed by running:
+```bash
+pip install -r requirements.txt
+```
+This includes Flask for the web server. Ensure Tesseract OCR and libcamera-still (on Raspberry Pi) are also installed and configured as per the main setup instructions.
+
+### Running the Web Server
+
+1.  Navigate to the project's root directory.
+2.  Start the Flask web server:
+    ```bash
+    python web_app/app.py
+    ```
+3.  The server will typically start on `0.0.0.0:5000`, meaning it's accessible from other devices on the same network.
+
+### Accessing the Web Interface
+
+1.  Open a web browser on a device connected to the same network as your Raspberry Pi (or the machine running the server).
+2.  Navigate to `http://<YOUR_RASPBERRY_PI_IP_ADDRESS>:5000`. Replace `<YOUR_RASPBERRY_PI_IP_ADDRESS>` with the actual IP address of your Raspberry Pi. If running on a local machine for testing, you can use `http://127.0.0.1:5000` or `http://localhost:5000`.
+
+### Using the Interface
+
+*   **Scan Card**: Click the "Scan Card" button to trigger the camera (if connected and configured) to capture an image. The system will attempt to OCR the card, identify it, and save its details. The card list will update automatically.
+*   **Card List**: Displays all cards currently stored in the database.
+*   **Filters**:
+    *   **Color**: Enter a color letter (e.g., W, U, B, R, G) or combination (e.g., WU, BR) to filter cards by their color identity.
+    *   **Mana Cost (CMC)**: Enter a number to filter by Converted Mana Cost. (Note: This filter's effectiveness depends on whether CMC data is available and accurately stored for scanned cards).
+    *   Click "Apply Filters" to refresh the card list based on your criteria.
+    *   Click "Clear Filters" to remove all filter criteria and show all cards.
+*   **Download CSV**: Click the "Download CSV" button to export all card data currently in the database as a CSV file.

@@ -1,92 +1,91 @@
 import argparse
 import os
 import sys
+from pathlib import Path
 
-# Add project root to sys.path if main.py is intended to be run from anywhere
-# For this project structure, recognition.ocr_mvp should be importable if
-# main.py is in the root and Python is run from the root.
-# However, to be robust, especially if ocr_mvp itself has relative path logic
-# for its own internal imports or file access that assumes a CWD,
-# it might be good to ensure sys.path includes the project root.
-# For now, let's assume direct import works as it's a common pattern.
+# Add project root to sys.path to allow importing recognition and web_app
+project_root = Path(__file__).resolve().parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 try:
-    from recognition.ocr_mvp import main as process_cards_main
-except ModuleNotFoundError:
-    # This block allows running main.py directly from the root project directory
-    # even if the 'recognition' module isn't installed in the environment,
-    # by adding the project root to sys.path.
-    print("Module 'recognition.ocr_mvp' not found. Attempting to add project root to sys.path.")
-    project_root = os.path.dirname(os.path.abspath(__file__))
-    if project_root not in sys.path: # Avoid adding duplicate paths
-        sys.path.insert(0, project_root)
-    try:
-        from recognition.ocr_mvp import main as process_cards_main
-    except ModuleNotFoundError as e:
-        print(f"Failed to import 'recognition.ocr_mvp' even after adding project root to path: {e}")
-        print("Please ensure that the script is run from the project root directory or that the project modules are correctly installed.")
-        sys.exit(1)
-
+    from recognition.ocr_mvp import main_process_entries, init_db as ocr_init_db
+    from web_app.database import init_db as webapp_init_db
+except ModuleNotFoundError as e:
+    print(f"Failed to import modules: {e}")
+    print("Please ensure that the script is run from the project root directory")
+    print("and all submodules (recognition, web_app) are present.")
+    sys.exit(1)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Process Magic: The Gathering card images using OCR and Scryfall API."
+        description="Process Magic: The Gathering card images using OCR, store in DB."
     )
     
     parser.add_argument(
         "-i", "--image_dir",
-        default="tests/test_images",
+        default=str(project_root / "tests" / "test_images"), # Default relative to project root
         type=str,
-        help="Directory containing card images. Default: tests/test_images"
+        help=f"Directory containing card images. Default: tests/test_images"
     )
     
-    parser.add_argument(
-        "-o", "--output_csv",
-        default="tests/test_carddata.csv",
-        type=str,
-        help="Path to save the output CSV file. Default: tests/test_carddata.csv"
-    )
+    # Output CSV argument is removed as primary output is DB.
+    # Kept for potential future use or if some part of ocr_mvp still uses it, but main flow is DB.
+    # parser.add_argument(
+    #     "-o", "--output_csv",
+    #     default="tests/test_carddata.csv", # Default relative to project root
+    #     type=str,
+    #     help="Path to save the output CSV file (legacy). Default: tests/test_carddata.csv"
+    # )
     
     parser.add_argument(
         "-d", "--dict_path",
-        default="recognition/cards/card_names_symspell_clean.txt",
+        default=str(project_root / "recognition" / "cards" / "card_names_symspell_clean.txt"), # Default relative to project root
         type=str,
         help="Path to the SymSpell dictionary file. Default: recognition/cards/card_names_symspell_clean.txt"
     )
     
     parser.add_argument(
         "-ng", "--no_gui",
-        action="store_true", # Default is False. If flag is present, args.no_gui becomes True.
-        help="Disable GUI image preview. If set, GUI will not be shown."
+        action="store_true",
+        help="Disable GUI image preview if image_dir processing is used."
     )
 
     parser.add_argument(
-        "-uc", "--use_camera", # Changed from --use-camera to --use_camera for consistency with attribute name
+        "-uc", "--use_camera",
         action="store_true",
-        help="Use the camera for image input instead of a directory. If set, --image_dir is ignored."
+        help="Use the camera for image input instead of a directory. --image_dir is ignored if set."
+    )
+
+    parser.add_argument(
+        "--init_db",
+        action="store_true",
+        help="Initialize the database before processing."
     )
 
     args = parser.parse_args()
 
-    # The `main` function in ocr_mvp.py expects `show_gui_flag`.
-    # `ocr_mvp.main` has a default `show_gui_flag=True`.
-    # If args.no_gui is True (because --no_gui was specified), then show_gui_flag should be False.
-    # If args.no_gui is False (default, --no_gui not specified), then show_gui_flag should be True.
-    # So, show_gui_flag = not args.no_gui
-    
-    print(f"Starting card processing with the following settings:")
-    # Use os.path.abspath to show full paths for clarity
-    print(f"  Image Directory: {os.path.abspath(args.image_dir) if not args.use_camera else 'N/A (Camera input)'}")
-    print(f"  Output CSV: {os.path.abspath(args.output_csv)}")
-    print(f"  Dictionary Path: {os.path.abspath(args.dict_path)}")
-    print(f"  Show GUI: {not args.no_gui}")
-    print(f"  Use Camera: {args.use_camera}")
+    if args.init_db:
+        print("Initializing database (called from main.py)...")
+        # It's better to use the one from web_app as it's the source of truth for DB schema
+        webapp_init_db()
+        # ocr_init_db() # This one is also fine as they should be identical
 
-    process_cards_main(
-        image_dir=args.image_dir, # This will be ignored by ocr_mvp.main if use_camera is True
-        output_csv_file=args.output_csv,
+    print(f"Starting card processing:")
+    abs_image_dir = os.path.abspath(args.image_dir) if not args.use_camera else 'N/A (Camera input)'
+    abs_dict_path = os.path.abspath(args.dict_path)
+    
+    print(f"  Image Source: {'Camera' if args.use_camera else abs_image_dir}")
+    print(f"  Dictionary Path: {abs_dict_path}")
+    print(f"  Show GUI: {not args.no_gui}")
+
+    # Call the main processing function from ocr_mvp
+    main_process_entries(
+        image_dir=args.image_dir if not args.use_camera else None,
+        # output_csv_file=args.output_csv, # No longer primary, ocr_mvp doesn't use it for main flow
         dict_path=args.dict_path,
         show_gui_flag=not args.no_gui,
         use_camera=args.use_camera
     )
 
-    print("Processing complete.")
+    print("Processing via main.py complete.")
