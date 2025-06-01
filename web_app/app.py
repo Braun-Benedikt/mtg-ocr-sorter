@@ -25,7 +25,7 @@ if str(project_root_folder) not in sys.path:
 
 # Now, project-specific imports
 try:
-    from web_app.database import init_db, add_card, get_cards
+    from web_app.database import init_db, add_card, get_cards, delete_card
 except ModuleNotFoundError as e:
     print(f"ERROR: Could not import database module from web_app.database: {e}")
     print(f"Project root: {project_root_folder}, sys.path: {sys.path}")
@@ -33,6 +33,7 @@ except ModuleNotFoundError as e:
     def init_db(): print("DUMMY init_db: web_app.database not found")
     def add_card(name, **kwargs): print(f"DUMMY add_card: {name}"); return None
     def get_cards(**kwargs): print("DUMMY get_cards"); return []
+    def delete_card(card_id): print(f"DUMMY delete_card: {card_id}"); return False
 
 try:
     from recognition.ocr_mvp import capture_images_from_camera, process_image_to_db, CardNameCorrector
@@ -132,6 +133,17 @@ def export_cards_csv():
     mem_csv = io.BytesIO(csv_buffer.getvalue().encode('utf-8'))
     csv_buffer.close()
     return send_file(mem_csv, as_attachment=True, download_name='scanned_cards.csv', mimetype='text/csv')
+
+@app.route('/cards/delete/<int:card_id>', methods=['DELETE'])
+def delete_card_route(card_id):
+    try:
+        if delete_card(card_id):
+            return jsonify({"message": "Card deleted successfully"}), 200
+        else:
+            return jsonify({"error": "Card not found"}), 404
+    except Exception as e:
+        print(f"Error deleting card with ID {card_id}: {e}") # Log the error
+        return jsonify({"error": "Failed to delete card"}), 500
 
 if __name__ == '__main__':
     dict_dir = project_root_folder / "recognition" / "cards"

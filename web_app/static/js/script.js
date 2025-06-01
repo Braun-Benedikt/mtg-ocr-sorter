@@ -81,6 +81,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
             cardItem.appendChild(detailsDiv);
             cardItem.appendChild(imagePlaceholderDiv);
+
+            const deleteButton = document.createElement('button');
+            deleteButton.classList.add('delete-button'); // For styling if needed
+            deleteButton.textContent = 'Delete';
+            deleteButton.setAttribute('data-id', card.id);
+
+            deleteButton.addEventListener('click', async (event) => {
+                const cardId = event.target.getAttribute('data-id');
+                if (!confirm(`Are you sure you want to delete card ID ${cardId}?`)) {
+                    return;
+                }
+
+                scanStatusDiv.textContent = `Deleting card ID ${cardId}...`;
+                try {
+                    const response = await fetch(`/cards/delete/${cardId}`, {
+                        method: 'DELETE',
+                    });
+                    const result = await response.json(); // Try to parse JSON regardless of status for error messages
+
+                    if (response.ok) {
+                        scanStatusDiv.textContent = result.message || `Card ID ${cardId} deleted successfully.`;
+                        fetchAndDisplayCards(); // Refresh the list
+                    } else {
+                        // Use result.error if available, otherwise a generic message
+                        throw new Error(result.error || `Failed to delete card. Status: ${response.status}`);
+                    }
+                } catch (error) {
+                    console.error('Error deleting card:', error);
+                    scanStatusDiv.textContent = `Error deleting card: ${error.message}`;
+                }
+            });
+
+            cardItem.appendChild(deleteButton); // Add button to card item
             cardListDiv.appendChild(cardItem);
         });
     };
