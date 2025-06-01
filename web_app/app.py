@@ -36,7 +36,7 @@ except ModuleNotFoundError as e:
     def delete_card(card_id): print(f"DUMMY delete_card: {card_id}"); return False
 
 try:
-    from recognition.ocr_mvp import capture_images_from_camera, process_image_to_db, CardNameCorrector
+    from recognition.ocr_mvp import capture_images_from_camera, process_image_to_db, CardNameCorrector, setup_crop_interactively
     # Define DEFAULT_DICT_PATH using project_root_folder, AFTER project_root_folder is defined.
     DEFAULT_DICT_PATH = str(project_root_folder / "recognition" / "cards" / "card_names_symspell_clean.txt")
 except ModuleNotFoundError as e:
@@ -87,6 +87,14 @@ except Exception as e:
 @app.route('/')
 def index():
     return render_template('index.html') # Serve the main HTML page
+
+@app.route('/configure_crop', methods=['POST'])
+def configure_crop_route():
+    try:
+        setup_crop_interactively()
+        return jsonify({"message": "Crop configuration process started. Check server display."}), 200
+    except Exception as e:
+        return jsonify({"error": "Failed to start crop configuration", "details": str(e)}), 500
 
 @app.route('/scan', methods=['POST'])
 def scan_card():
