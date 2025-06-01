@@ -7,6 +7,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const manaCostFilterInput = document.getElementById('manaCostFilter');
     const applyFilterButton = document.getElementById('applyFilterButton');
     const clearFilterButton = document.getElementById('clearFilterButton');
+    const configureCropButton = document.getElementById('configureCropButton');
+
+    if (configureCropButton) {
+        configureCropButton.addEventListener('click', async () => {
+            scanStatusDiv.textContent = 'Attempting to open crop configuration tool on the server... Please check the server display.';
+            configureCropButton.disabled = true;
+            try {
+                const response = await fetch('/configure_crop', { method: 'POST' });
+                const result = await response.json();
+                if (response.ok) {
+                    scanStatusDiv.textContent = result.message || 'Crop configuration initiated. Check server display.';
+                } else {
+                    throw new Error(result.error || 'Failed to start crop configuration.');
+                }
+            } catch (error) {
+                console.error('Error during crop configuration:', error);
+                scanStatusDiv.textContent = 'Error during crop configuration: ' + error.message;
+            } finally {
+                configureCropButton.disabled = false;
+            }
+        });
+    }
 
     const fetchAndDisplayCards = async () => {
         scanStatusDiv.textContent = 'Loading cards...';
