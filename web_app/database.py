@@ -81,6 +81,16 @@ def get_cards(color: str = None, mana_cost: int = None): # Mana cost filter to b
     # Convert sqlite3.Row objects to dictionaries for easier JSON serialization
     return [dict(card) for card in cards]
 
+def delete_card(card_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+    conn.commit()
+    rows_deleted = cursor.rowcount
+    conn.close()
+    print(f"Attempted to delete card with ID: {card_id}. Rows affected: {rows_deleted}")
+    return rows_deleted > 0
+
 if __name__ == '__main__':
     # Example usage:
     print("Initializing database...")
@@ -107,3 +117,33 @@ if __name__ == '__main__':
         print(f"Database file created successfully at {DATABASE_PATH}")
     else:
         print(f"Error: Database file not found at {DATABASE_PATH}")
+
+    print("\nTesting delete_card function...")
+    # Assuming card with ID 1 exists from previous sample data
+    # First, let's add a card to ensure it exists
+    test_card_id = add_card("Test Card for Deletion", ocr_name_raw="Test Del", price=0.10, color_identity="B")
+    if test_card_id:
+        print(f"Added card with ID: {test_card_id} for deletion test.")
+        cards_before_delete = get_cards()
+        # print(f"Cards before delete (test card ID {test_card_id}): {[dict(c) for c in cards_before_delete]}") # Optional: very verbose
+
+        delete_success = delete_card(test_card_id)
+        print(f"Deletion of card ID {test_card_id} was {'successful' if delete_success else 'unsuccessful'}.")
+
+        cards_after_delete = get_cards()
+        # print(f"Cards after delete (test card ID {test_card_id}): {[dict(c) for c in cards_after_delete]}") # Optional: very verbose
+
+        # Verify it's gone
+        found_after_delete = any(c['id'] == test_card_id for c in cards_after_delete)
+        if not found_after_delete:
+            print(f"Card ID {test_card_id} successfully removed from database.")
+        else:
+            print(f"ERROR: Card ID {test_card_id} still found in database after deletion attempt.")
+    else:
+        print("Failed to add a card for deletion test.")
+
+    # Example of trying to delete a non-existent card
+    non_existent_id = 9999
+    print(f"\nAttempting to delete non-existent card ID: {non_existent_id}")
+    delete_non_existent_success = delete_card(non_existent_id)
+    print(f"Deletion of non-existent card ID {non_existent_id} was {'successful' if delete_non_existent_success else 'unsuccessful (expected)'}.")

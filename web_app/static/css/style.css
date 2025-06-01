@@ -155,3 +155,20 @@ button:hover, .button:hover {
         align-self: center; /* Center placeholder when stacked */
     }
 }
+
+/* Style for the delete button */
+.delete-button {
+    background-color: #dc3545; /* Red color for delete actions */
+    color: white;
+    padding: 8px 12px; /* Slightly smaller padding */
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em; /* Slightly smaller font */
+    transition: background-color 0.3s ease;
+    margin-left: 10px; /* Space from the preceding element in the flex container (card-item) */
+}
+
+.delete-button:hover {
+    background-color: #c82333; /* Darker red on hover */
+}
