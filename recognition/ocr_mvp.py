@@ -8,6 +8,8 @@ import pandas as pd # Keep for now, might be removed if no other part uses it
 import pytesseract
 import tkinter as tk
 from PIL import Image, ImageTk
+import matplotlib.pyplot as plt
+from matplotlib.widgets import RectangleSelector
 from pathlib import Path
 import numpy as np
 import requests
@@ -80,61 +82,86 @@ def setup_crop_interactively():
         print("Error: Could not load or create an image for ROI selection.")
         return
 
-    cv2.imshow("Select Crop Area", image)
-    print("Select the card name area by drawing a rectangle, then press ENTER or SPACE.")
-    print("Press C to cancel selection.")
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-    # Ensure the window is brought to the front if possible (platform dependent)
-    cv2.setWindowProperty("Select Crop Area", cv2.WND_PROP_TOPMOST, 1)
-    cv2.waitKey(1) # Necessary to ensure window is updated and can be focused
+    # Placeholder for the selected ROI, to be updated by the callback
+    # Using a list to allow modification in the callback scope
+    selected_roi = [None]
 
-    r = cv2.selectROI("Select Crop Area", image, showCrosshair=True, fromCenter=False)
-    cv2.destroyAllWindows() # Close the window immediately after selection or cancellation
+    def onselect(eclick, erelease):
+        # eclick and erelease are MouseEvents on press and release
+        # eclick.xdata, eclick.ydata, erelease.xdata, erelease.ydata
+        x1, y1 = int(eclick.xdata), int(eclick.ydata)
+        x2, y2 = int(erelease.xdata), int(erelease.ydata)
+        # Store as (x, y, w, h)
+        # Ensure x1,y1 is top-left and x2,y2 is bottom-right
+        _x = min(x1, x2)
+        _y = min(y1, y2)
+        _w = abs(x1 - x2)
+        _h = abs(y1 - y2)
+        selected_roi[0] = (_x, _y, _w, _h)
+        print(f"ROI drawn: (x={_x}, y={_y}, w={_w}, h={_h})") # Log the raw selection
 
-    if r is None or not any(r): # r will be (0,0,0,0) if 'c' or Esc is pressed, or window closed.
-        print("ROI selection cancelled or window closed. Crop ratios not updated.")
-        return
+    fig, ax = plt.subplots()
+    ax.imshow(image_rgb)
+    ax.set_title("Select card name area. Close window to confirm selection or cancel.")
 
-    x, y, w, h = r
-    if w == 0 or h == 0:
-        print("No area selected (width or height is zero). Crop ratios not updated.")
-        return
+    # RectangleSelector
+    # Important: The selector object must be assigned to a variable,
+    # otherwise it will be garbage collected and won't work.
+    rs = RectangleSelector(ax, onselect,
+                           useblit=True,
+                           button=[1],  # Left mouse button
+                           minspanx=5, minspany=5,
+                           spancoords='pixels',
+                           interactive=True)
 
-    img_h, img_w = image.shape[:2]
-    if img_h == 0 or img_w == 0:
-        print("Error: Image dimensions are zero. Cannot calculate ratios.")
-        return
+    print("Please select the crop area in the Matplotlib window.")
+    print("Close the window when done, or to cancel if no selection was made.")
+    plt.show() # This is a blocking call. Window needs to be closed by user.
 
-    # Calculate new ratios
-    new_hr_start = y / img_h
-    new_hr_end = (y + h) / img_h
-    new_wr_start = x / img_w
-    new_wr_end = (x + w) / img_w
+    # After the window is closed, check if an ROI was selected
+    if selected_roi[0] is not None:
+        r = selected_roi[0]
+        x, y, w, h = r # These are already int from the onselect callback
+        print(f"Final ROI chosen: (x={x}, y={y}, w={w}, h={h})")
 
-    # Update global variables
-    # Note: This updates globals only within this module (ocr_mvp.py).
-    # If other modules import these constants directly, they might not see the change
-    # unless they re-import or access them through a function in this module.
-    global CROP_RATIO_HEIGHT_START, CROP_RATIO_HEIGHT_END, CROP_RATIO_WIDTH_START, CROP_RATIO_WIDTH_END
-    CROP_RATIO_HEIGHT_START = new_hr_start
-    CROP_RATIO_HEIGHT_END = new_hr_end
-    CROP_RATIO_WIDTH_START = new_wr_start
-    CROP_RATIO_WIDTH_END = new_wr_end
+        img_h, img_w = image_rgb.shape[:2] # Get dimensions from the RGB image
 
-    # Alternative using globals().update() if preferred, though direct assignment is clearer for defined globals
-    # globals().update({
-    #     'CROP_RATIO_HEIGHT_START': new_hr_start,
-    #     'CROP_RATIO_HEIGHT_END': new_hr_end,
-    #     'CROP_RATIO_WIDTH_START': new_wr_start,
-    #     'CROP_RATIO_WIDTH_END': new_wr_end
-    # })
+        if w > 0 and h > 0: # Ensure valid selection (width and height are positive)
+            # Calculate new ratios
+            new_hr_start = y / img_h
+            new_hr_end = (y + h) / img_h
+            new_wr_start = x / img_w
+            new_wr_end = (x + w) / img_w
 
-    print("\n--- Crop Ratios Updated ---")
-    print(f"CROP_RATIO_HEIGHT_START = {CROP_RATIO_HEIGHT_START:.4f}")
-    print(f"CROP_RATIO_HEIGHT_END = {CROP_RATIO_HEIGHT_END:.4f}")
-    print(f"CROP_RATIO_WIDTH_START = {CROP_RATIO_WIDTH_START:.4f}")
-    print(f"CROP_RATIO_WIDTH_END = {CROP_RATIO_WIDTH_END:.4f}")
-    print("---------------------------\n")
+            # Update global variables
+            global CROP_RATIO_HEIGHT_START, CROP_RATIO_HEIGHT_END
+            global CROP_RATIO_WIDTH_START, CROP_RATIO_WIDTH_END
+
+            CROP_RATIO_HEIGHT_START = new_hr_start
+            CROP_RATIO_HEIGHT_END = new_hr_end
+            CROP_RATIO_WIDTH_START = new_wr_start
+            CROP_RATIO_WIDTH_END = new_wr_end
+
+            # Using globals().update() is also an option here if preferred:
+            # globals().update({
+            #     'CROP_RATIO_HEIGHT_START': new_hr_start,
+            #     'CROP_RATIO_HEIGHT_END': new_hr_end,
+            #     'CROP_RATIO_WIDTH_START': new_wr_start,
+            #     'CROP_RATIO_WIDTH_END': new_wr_end
+            # })
+
+            print("\n--- Crop Ratios Updated (using Matplotlib selection) ---")
+            print(f"CROP_RATIO_HEIGHT_START = {CROP_RATIO_HEIGHT_START:.4f}")
+            print(f"CROP_RATIO_HEIGHT_END = {CROP_RATIO_HEIGHT_END:.4f}")
+            print(f"CROP_RATIO_WIDTH_START = {CROP_RATIO_WIDTH_START:.4f}")
+            print(f"CROP_RATIO_WIDTH_END = {CROP_RATIO_WIDTH_END:.4f}")
+            print("--------------------------------------------------------\n")
+        else:
+            print("No valid ROI selected (width or height is zero). Crop ratios not updated.")
+    else:
+        print("ROI selection cancelled or window closed before selection. Crop ratios not updated.")
 
 
 def capture_images_from_camera() -> str | None:
