@@ -1,0 +1,157 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+.container {
+    max-width: 900px;
+    margin: auto;
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+h1, h2 {
+    color: #333;
+    text-align: center;
+}
+
+.controls, .filters {
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap; /* Allow wrapping for smaller screens */
+}
+
+.filters label {
+    font-weight: bold;
+}
+
+.filters input[type="text"], .filters input[type="number"] {
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-right: 10px; /* Space between input and next element */
+}
+
+button, .button {
+    background-color: #007bff;
+    color: white;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    text-decoration: none; /* For <a> styled as button */
+    font-size: 1em;
+    transition: background-color 0.3s ease;
+}
+
+button:hover, .button:hover {
+    background-color: #0056b3;
+}
+
+#scanButton {
+    background-color: #28a745; /* Green for scan */
+}
+#scanButton:hover {
+    background-color: #1e7e34;
+}
+
+#downloadCsvButton {
+    background-color: #17a2b8; /* Info blue */
+}
+#downloadCsvButton:hover {
+    background-color: #117a8b;
+}
+
+#applyFilterButton {
+    background-color: #ffc107; /* Amber for apply */
+    color: #333;
+}
+#applyFilterButton:hover {
+    background-color: #d39e00;
+}
+
+#clearFilterButton {
+    background-color: #6c757d; /* Secondary grey */
+}
+#clearFilterButton:hover {
+    background-color: #545b62;
+}
+
+
+#scanStatus {
+    margin-bottom: 15px;
+    font-style: italic;
+    text-align: center;
+}
+
+#cardList {
+    margin-top: 20px;
+}
+
+.card-item {
+    background-color: #f9f9f9;
+    border: 1px solid #eee;
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    display: flex; /* Use flexbox for layout */
+    justify-content: space-between; /* Space out items */
+    align-items: center; /* Align items vertically */
+    flex-wrap: wrap; /* Allow items to wrap on small screens */
+}
+
+.card-item p {
+    margin: 5px 0;
+}
+
+.card-item strong {
+    color: #555;
+}
+
+.card-details {
+    flex-grow: 1; /* Allow details to take available space */
+}
+.card-image-placeholder {
+    flex-shrink: 0; /* Don't shrink image placeholder */
+    margin-left: 15px; /* Space between details and image */
+    width: 100px; /* Example width */
+    height: 140px; /* Example height for card aspect ratio */
+    background-color: #e0e0e0;
+    border: 1px dashed #ccc;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    font-size: 0.8em;
+    color: #777;
+}
+/* Basic responsive adjustments */
+@media (max-width: 600px) {
+    .controls, .filters {
+        flex-direction: column;
+        align-items: stretch; /* Make buttons/inputs full width */
+    }
+    .filters input[type="text"], .filters input[type="number"] {
+        width: calc(100% - 18px); /* Adjust width considering padding */
+        margin-right: 0;
+        margin-bottom: 10px; /* Space below input when stacked */
+    }
+    .card-item {
+        flex-direction: column; /* Stack card details and image placeholder */
+        align-items: flex-start; /* Align to start */
+    }
+    .card-image-placeholder {
+        margin-left: 0;
+        margin-top: 10px; /* Space above image when stacked */
+        align-self: center; /* Center placeholder when stacked */
+    }
+}
