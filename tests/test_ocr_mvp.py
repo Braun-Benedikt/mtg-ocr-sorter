@@ -136,55 +136,8 @@ class TestOcrMvp(unittest.TestCase):
         # Current ocr_mvp.py calls correct even with empty string.
         mock_corrector.correct.assert_called_once_with("")
 
-
-    @patch('recognition.ocr_mvp.requests.get')
-    def test_fetch_card_information(self, mock_requests_get):
-        # --- Test Case 1: Successful API call with EUR price ---
-        mock_response_eur = MagicMock()
-        mock_response_eur.json.return_value = {"prices": {"eur": "1.23", "usd": "1.50"}, "color_identity": ["R"]}
-        mock_response_eur.raise_for_status = MagicMock() # Does nothing by default
-        mock_requests_get.return_value = mock_response_eur
-
-        result_eur = fetch_card_information("Test Card EUR")
-        self.assertEqual(result_eur, ["1.23", "R"])
-        mock_requests_get.assert_called_with("https://api.scryfall.com/cards/named", params={"exact": "Test Card EUR"})
-        mock_response_eur.raise_for_status.assert_called_once()
-
-        # --- Test Case 2: Successful API call with USD price (EUR is null) ---
-        mock_response_usd = MagicMock()
-        mock_response_usd.json.return_value = {"prices": {"eur": None, "usd": "1.50"}, "color_identity": ["U"]}
-        mock_response_usd.raise_for_status = MagicMock()
-        mock_requests_get.return_value = mock_response_usd
-
-        result_usd = fetch_card_information("Test Card USD")
-        self.assertEqual(result_usd, ["1.50", "U"])
-        
-        # --- Test Case 3: Price is missing ---
-        mock_response_no_price = MagicMock()
-        mock_response_no_price.json.return_value = {"prices": {"eur": None, "usd": None}, "color_identity": ["B"]}
-        mock_response_no_price.raise_for_status = MagicMock()
-        mock_requests_get.return_value = mock_response_no_price
-        
-        result_no_price = fetch_card_information("Test Card No Price")
-        self.assertEqual(result_no_price, [None, "B"]) # Expect None for price
-
-        # --- Test Case 4: API error (e.g., 404) ---
-        mock_response_error = MagicMock()
-        mock_response_error.raise_for_status.side_effect = requests.exceptions.HTTPError("Test HTTP Error")
-        mock_requests_get.return_value = mock_response_error
-
-        result_error = fetch_card_information("Test Card Error")
-        self.assertIsNone(result_error)
-        
-        # --- Test Case 5: API returns unexpected JSON (e.g. 'prices' key missing) ---
-        mock_response_bad_json = MagicMock()
-        mock_response_bad_json.json.return_value = {"color_identity": ["W"]} # Missing 'prices'
-        mock_response_bad_json.raise_for_status = MagicMock()
-        mock_requests_get.return_value = mock_response_bad_json
-
-        result_bad_json = fetch_card_information("Test Card Bad JSON")
-        self.assertEqual(result_bad_json, [None, "W"]) # Price is None, color may be found
-
+    # Note: The original test_fetch_card_information has been removed as per plan.
+    # New tests for fetch_card_information will be added at the module level (pytest style).
 
     @patch('recognition.ocr_mvp.fetch_card_information')
     @patch('recognition.ocr_mvp.extract_card_name')
@@ -279,3 +232,64 @@ if __name__ == '__main__':
             sys.modules['recognition.ocr_mvp'].pytesseract.tesseract_cmd = "mocked_tesseract_cmd_for_tests"
     
     unittest.main(argv=['first-arg-is-ignored'], exit=False)
+
+
+# --- New Pytest-style tests for fetch_card_information ---
+import pytest # Optional: if using pytest fixtures or markers
+
+@patch('recognition.ocr_mvp.requests.get')
+def test_fetch_card_information_success(mock_get):
+    # Setup mock response
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        "name": "Sol Ring",
+        "cmc": 1.0,
+        "type_line": "Artifact",
+        "color_identity": ["C"],
+        "prices": {"usd": "1.50", "eur": "1.20"},
+        "image_uris": {"normal": "https://example.com/sol_ring.jpg"}
+    }
+    mock_response.raise_for_status = MagicMock() # Ensure it doesn't raise for success
+    mock_get.return_value = mock_response
+
+    card_info = fetch_card_information("Sol Ring")
+
+    assert card_info is not None
+    assert card_info["price"] == "1.20" # Assuming EUR is preferred by the function
+    assert card_info["color_identity"] == "C"
+    assert card_info["cmc"] == 1.0
+    assert card_info["type_line"] == "Artifact"
+    assert card_info["image_uri"] == "https://example.com/sol_ring.jpg"
+    # The function in ocr_mvp.py uses a timeout, so we should expect it in the call.
+    mock_get.assert_called_once_with("https://api.scryfall.com/cards/named?exact=Sol Ring", timeout=10)
+
+@patch('recognition.ocr_mvp.requests.get')
+def test_fetch_card_information_api_error(mock_get):
+    # We need requests.exceptions.RequestException for this test
+    import requests
+    mock_get.side_effect = requests.exceptions.RequestException("API down")
+
+    card_info = fetch_card_information("Unknown Card")
+    assert card_info is None
+
+@patch('recognition.ocr_mvp.requests.get')
+def test_fetch_card_information_missing_fields(mock_get):
+    # Test behavior when some fields are missing from Scryfall response
+    mock_response = MagicMock()
+    mock_response.json.return_value = { # Missing cmc, type_line, image_uris
+        "name": "Test Card",
+        "color_identity": ["W"],
+        "prices": {"usd": "0.10"} # EUR is missing, USD should be used
+    }
+    mock_response.raise_for_status = MagicMock()
+    mock_get.return_value = mock_response
+
+    card_info = fetch_card_information("Test Card")
+
+    assert card_info is not None
+    assert card_info["price"] == "0.10" # USD fallback
+    assert card_info["color_identity"] == "W" # Should still get color
+    assert card_info["cmc"] == 0.0 # Default value
+    assert card_info["type_line"] == "" # Default value
+    assert card_info["image_uri"] == "" # Default value
+    mock_get.assert_called_once_with("https://api.scryfall.com/cards/named?exact=Test Card", timeout=10)

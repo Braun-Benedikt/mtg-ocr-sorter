@@ -34,8 +34,8 @@ except ModuleNotFoundError as e:
     print("Ensure web_app/database.py exists and project root is in sys.path.")
     # Define dummy functions if import fails, so the script can still be imported by other modules
     # without crashing, though it won't save to DB.
-    def add_card(name: str, ocr_name_raw: str = None, price: float = None, color_identity: str = None, image_path: str = None):
-        print(f"DUMMY add_card called: {name} (Database not available)")
+    def add_card(name: str, ocr_name_raw: str = None, price: float = None, color_identity: str = None, image_path: str = None, cmc: float = 0.0, type_line: str = '', image_uri: str = ''):
+        print(f"DUMMY add_card called: {name}, cmc: {cmc}, type: {type_line}, image_uri: {image_uri} (Database not available)")
         return None
     def init_db():
         print("DUMMY init_db called (Database not available)")
@@ -263,7 +263,10 @@ def fetch_card_information(card_name):
         price = data.get('prices', {}).get('eur') or data.get('prices', {}).get('usd')
         color_id_list = data.get('color_identity', [])
         color_id = "".join(color_id_list) if color_id_list else "C" # Default to 'C' if empty
-        return {"price": price, "color_identity": color_id}
+        cmc = data.get('cmc', 0.0)
+        type_line = data.get('type_line', '')
+        image_uri = data.get('image_uris', {}).get('normal', '')
+        return {"price": price, "color_identity": color_id, "cmc": cmc, "type_line": type_line, "image_uri": image_uri}
     except requests.RequestException as e: # More specific exception handling
         print(f"⚠️ API Error for {card_name}: {e}")
         return None
@@ -322,6 +325,9 @@ def process_image_to_db(image_path: str, corrector: CardNameCorrector, show_gui:
     card_info = fetch_card_information(ocr_corrected)
     price = card_info['price'] if card_info else None
     color_identity = card_info['color_identity'] if card_info else None
+    cmc = card_info['cmc'] if card_info else 0.0
+    type_line = card_info['type_line'] if card_info else ''
+    image_uri = card_info['image_uri'] if card_info else ''
 
     try:
         card_id = add_card(
@@ -329,7 +335,10 @@ def process_image_to_db(image_path: str, corrector: CardNameCorrector, show_gui:
             ocr_name_raw=ocr_raw,
             price=price,
             color_identity=color_identity,
-            image_path=image_path
+            image_path=image_path,
+            cmc=cmc,
+            type_line=type_line,
+            image_uri=image_uri
         )
         print(f"Card '{ocr_corrected}' saved to database with ID: {card_id}.")
 
@@ -342,7 +351,10 @@ def process_image_to_db(image_path: str, corrector: CardNameCorrector, show_gui:
             "ocr_name_raw": ocr_raw,
             "price": price,
             "color_identity": color_identity,
-            "image_path": image_path
+            "image_path": image_path,
+            "cmc": cmc,
+            "type_line": type_line,
+            "image_uri": image_uri
         }
     except Exception as e:
         print(f"Error saving card '{ocr_corrected}' to database: {e}")
