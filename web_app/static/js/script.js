@@ -5,6 +5,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const scanStatusDiv = document.getElementById('scanStatus');
     const colorFilterInput = document.getElementById('colorFilter');
     const manaCostFilterInput = document.getElementById('manaCostFilter');
+    const maxPriceFilterInput = document.getElementById('maxPriceFilter'); // New
+    const cardCountDisplay = document.getElementById('cardCountDisplay'); // New
+    const totalPriceDisplay = document.getElementById('totalPriceDisplay'); // New
     const applyFilterButton = document.getElementById('applyFilterButton');
     const clearFilterButton = document.getElementById('clearFilterButton');
     const configureCropButton = document.getElementById('configureCropButton');
@@ -36,12 +39,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const params = new URLSearchParams();
         const color = colorFilterInput.value.trim();
         const manaCost = manaCostFilterInput.value.trim();
+        const maxPrice = maxPriceFilterInput.value.trim();
 
         if (color) {
             params.append('color', color);
         }
         if (manaCost) {
             params.append('mana_cost', manaCost);
+        }
+        if (maxPrice) {
+            params.append('max_price', maxPrice);
         }
 
         if (params.toString()) {
@@ -54,18 +61,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const cards = await response.json();
-            renderCards(cards);
-            scanStatusDiv.textContent = cards.length > 0 ? '' : 'No cards found.';
+            renderCards(cards); // This will also update count/total for empty results
+
+            if (cards.length > 0) {
+                if (cardCountDisplay) {
+                    cardCountDisplay.textContent = `Displaying ${cards.length} card(s).`;
+                }
+                if (totalPriceDisplay) {
+                    let totalPrice = 0;
+                    cards.forEach(card => {
+                        if (card.price !== null && typeof card.price === 'number') {
+                            totalPrice += card.price;
+                        }
+                    });
+                    totalPriceDisplay.textContent = `Total Price of Displayed Cards: ${totalPrice.toFixed(2)} EUR/USD`;
+                }
+            }
+            // scanStatusDiv.textContent is handled by renderCards for empty, and here for success.
+            scanStatusDiv.textContent = cards.length > 0 ? 'Cards loaded.' : 'No cards found matching criteria.';
+
         } catch (error) {
             console.error('Error fetching cards:', error);
             cardListDiv.innerHTML = '<p>Error loading cards. Please try again.</p>';
             scanStatusDiv.textContent = 'Error loading cards.';
+            if (cardCountDisplay) cardCountDisplay.textContent = '';
+            if (totalPriceDisplay) totalPriceDisplay.textContent = '';
         }
     };
 
     const renderCards = (cards) => {
         if (!cards || cards.length === 0) {
             cardListDiv.innerHTML = '<p>No cards scanned yet, or none match current filters.</p>';
+            if (cardCountDisplay) cardCountDisplay.textContent = 'Displaying 0 cards.';
+            if (totalPriceDisplay) totalPriceDisplay.textContent = 'Total Price: 0.00 EUR/USD';
             return;
         }
 
@@ -82,27 +110,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 <p><strong>OCR Raw:</strong> ${card.ocr_name_raw || 'N/A'}</p>
                 <p><strong>Price:</strong> ${card.price !== null ? card.price : 'N/A'} EUR/USD</p>
                 <p><strong>Color Identity:</strong> ${card.color_identity || 'N/A'}</p>
+                <p><strong>CMC:</strong> ${card.cmc !== null ? card.cmc : 'N/A'}</p>
+                <p><strong>Type:</strong> ${card.type_line || 'N/A'}</p>
                 <p><strong>Timestamp:</strong> ${card.timestamp || 'N/A'}</p>
-                ${card.image_path ? `<p><small>Image Path: ${card.image_path}</small></p>` : ''}
+                ${card.image_uri ? `<p><strong>Image:</strong> <a href="${card.image_uri}" target="_blank">View on Scryfall</a></p>` : '<p><strong>Image:</strong> N/A</p>'}
             `;
 
-            const imagePlaceholderDiv = document.createElement('div');
-            imagePlaceholderDiv.classList.add('card-image-placeholder');
-            // In a real app, you might try to load an image if a URL/path is available
-            // For local paths like `card.image_path`, direct display in browser is tricky
-            // unless served. For now, just a placeholder.
-            imagePlaceholderDiv.textContent = 'Card Image (placeholder)';
-            // If card.image_path was a URL:
-            // const img = document.createElement('img');
-            // img.src = card.image_path;
-            // img.alt = card.name;
-            // img.style.maxWidth = '100px'; // Basic styling
-            // img.style.maxHeight = '140px';
-            // imagePlaceholderDiv.appendChild(img);
-
-
             cardItem.appendChild(detailsDiv);
-            cardItem.appendChild(imagePlaceholderDiv);
 
             const deleteButton = document.createElement('button');
             deleteButton.classList.add('delete-button'); // For styling if needed
@@ -169,8 +183,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (clearFilterButton) {
         clearFilterButton.addEventListener('click', () => {
-            colorFilterInput.value = '';
-            manaCostFilterInput.value = '';
+            if (colorFilterInput) colorFilterInput.value = '';
+            if (manaCostFilterInput) manaCostFilterInput.value = '';
+            if (maxPriceFilterInput) maxPriceFilterInput.value = ''; // Add this line
             fetchAndDisplayCards();
         });
     }

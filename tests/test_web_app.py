@@ -1,7 +1,8 @@
+import pytest
+import json
 import os
+import sqlite3
 import sys
-import unittest
-import tempfile
 from pathlib import Path
 
 # Add project root to sys.path to allow importing web_app modules
@@ -9,90 +10,189 @@ project_root_folder = Path(__file__).resolve().parent.parent
 if str(project_root_folder) not in sys.path:
     sys.path.insert(0, str(project_root_folder))
 
-from web_app.app import app as flask_app
-# The following imports assume that web_app.database can be reconfigured
-# to use a different DATABASE_PATH for testing.
-from web_app.database import init_db as actual_init_db
-from web_app.database import add_card as actual_add_card
-from web_app.database import get_cards as actual_get_cards
-from web_app.database import delete_card as actual_delete_card
-from web_app.database import get_db_connection as actual_get_db_connection
-import web_app.database # To modify its DATABASE_PATH
+from web_app.app import app as flask_app # Renamed to avoid conflict with fixture
+# Import database functions that will be used.
+# The DATABASE_PATH within database.py will be monkeypatched by the fixture.
+from web_app.database import init_db, add_card, get_cards
+import web_app.database # To allow monkeypatching web_app.database.DATABASE_PATH
 
-class WebAppTests(unittest.TestCase):
+# Use a different database for testing
+TEST_DATABASE_NAME = 'test_magic_cards.db'
+# Place it in the same directory as the original database for consistency
+# This requires web_app.database.DATABASE_PATH to be known at this point.
+# We assume the original DATABASE_PATH is like /path/to/web_app/magic_cards.db
+# So, we get the parent directory of that.
+ACTUAL_DATABASE_PATH_FROM_MODULE = web_app.database.DATABASE_PATH
+TEST_DATABASE_PATH = os.path.join(os.path.dirname(ACTUAL_DATABASE_PATH_FROM_MODULE), TEST_DATABASE_NAME)
 
-    @classmethod
-    def setUpClass(cls):
-        cls.db_fd, cls.test_db_path = tempfile.mkstemp(suffix='.db')
-        os.close(cls.db_fd) # Close file descriptor, tempfile.mkstemp opens it
 
-        cls.original_db_path = web_app.database.DATABASE_PATH
-        web_app.database.DATABASE_PATH = cls.test_db_path
+@pytest.fixture
+def app_client():
+    # Configure the app for testing
+    flask_app.config['TESTING'] = True
 
-        flask_app.config['TESTING'] = True
-        flask_app.config['DATABASE'] = cls.test_db_path # For Flask app, if it uses this config
-        cls.client = flask_app.test_client()
+    # Store original DB path from the imported module
+    original_db_module_path = web_app.database.DATABASE_PATH
 
-        # Ensure the schema is created in the new test_db_path
-        # This init_db call should now use the overridden web_app.database.DATABASE_PATH
-        actual_init_db()
+    # Monkeypatch database.py's DATABASE_PATH to use the test database path
+    web_app.database.DATABASE_PATH = TEST_DATABASE_PATH
 
-    @classmethod
-    def tearDownClass(cls):
-        os.unlink(cls.test_db_path)
-        web_app.database.DATABASE_PATH = cls.original_db_path
+    # Ensure a clean database for each test run (before this specific test function)
+    if os.path.exists(TEST_DATABASE_PATH):
+        os.remove(TEST_DATABASE_PATH)
 
-    def setUp(self):
-        # Clean all data from tables before each test
-        conn = actual_get_db_connection() # Uses the overridden path
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM cards")
-        # Add other tables here if they exist and need cleaning
-        conn.commit()
-        conn.close()
+    # Initialize the database schema within an application context
+    # init_db() will now use the monkeypatched TEST_DATABASE_PATH
+    with flask_app.app_context():
+        init_db()
 
-    def tearDown(self):
-        # Optional: could also clean tables here instead of setUp if preferred
-        pass
+    client = flask_app.test_client()
+    yield client
 
-    # --- Database Function Tests ---
-    def test_db_add_and_delete_card(self):
-        # Use actual_add_card, actual_delete_card, actual_get_cards
-        card_id = actual_add_card(name="Test Card", ocr_name_raw="Test", price=1.0, color_identity="W")
-        self.assertIsNotNone(card_id, "Card should be added and return an ID.")
+    # Clean up: remove test database
+    if os.path.exists(TEST_DATABASE_PATH):
+        os.remove(TEST_DATABASE_PATH)
 
-        retrieved_card_before_delete = actual_get_cards()
-        self.assertEqual(len(retrieved_card_before_delete), 1)
-        self.assertEqual(retrieved_card_before_delete[0]['id'], card_id)
+    # Restore original DB path in the module
+    web_app.database.DATABASE_PATH = original_db_module_path
 
-        success = actual_delete_card(card_id)
-        self.assertTrue(success, "delete_card should return True for a successful deletion.")
 
-        retrieved_cards_after_delete = actual_get_cards()
-        self.assertEqual(len(retrieved_cards_after_delete), 0, "Card should be deleted from the database.")
+def test_add_and_get_card_with_new_fields(app_client):
+    # Test adding a card with all new fields
+    # app_client fixture ensures test DB is initialized and cleaned up.
+    # Operations like add_card and get_cards need an app context if they rely on current_app
+    # or if get_db_connection relies on app context implicitly.
+    # Since our db functions get connection directly, app_context here is for good practice
+    # and for flask_app.config['TESTING'] to be effective.
+    with flask_app.app_context():
+        card_id = add_card(
+            name="Test Card",
+            ocr_name_raw="Test Card Raw",
+            price=1.99,
+            color_identity="U",
+            image_path="/path/to/local.jpg", # Still accepted
+            cmc=2.0,
+            type_line="Creature - Merfolk",
+            image_uri="https://example.com/test_card.jpg"
+        )
+        assert card_id is not None
 
-    def test_db_delete_non_existent_card(self):
-        success = actual_delete_card(99999) # Assuming this ID doesn't exist
-        self.assertFalse(success, "delete_card should return False for a non-existent card.")
+        cards = get_cards() # This should now use the test DB via patched DATABASE_PATH
+        assert len(cards) == 1
+        card = cards[0]
+        assert card["name"] == "Test Card"
+        assert card["price"] == 1.99
+        assert card["cmc"] == 2.0
+        assert card["type_line"] == "Creature - Merfolk"
+        assert card["image_uri"] == "https://example.com/test_card.jpg"
 
-    # --- API Endpoint Tests ---
-    def test_api_delete_card_success(self):
-        card_id = actual_add_card(name="API Test Card", ocr_name_raw="API Test", price=2.0, color_identity="B")
-        self.assertIsNotNone(card_id)
+def test_get_cards_endpoint(app_client):
+    with flask_app.app_context():
+        add_card("Card 1", price=5.0, cmc=3.0, type_line="Sorcery", image_uri="uri1", color_identity="R")
+        add_card("Card 2", price=10.0, cmc=4.0, type_line="Instant", image_uri="uri2", color_identity="U")
 
-        response = self.client.delete(f'/cards/delete/{card_id}')
-        self.assertEqual(response.status_code, 200)
-        json_data = response.get_json()
-        self.assertEqual(json_data['message'], "Card deleted successfully")
+    response = app_client.get('/cards')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert len(data) == 2
+    # Cards are ordered by timestamp DESC (most recent first)
+    # Assuming Card 2 was added after Card 1, it should appear first.
+    assert data[0]['name'] == 'Card 2'
+    assert data[0]['cmc'] == 4.0
+    assert data[0]['type_line'] == 'Instant'
+    assert data[0]['image_uri'] == 'uri2'
+    assert data[0]['color_identity'] == 'U'
 
-        cards_in_db = actual_get_cards()
-        self.assertEqual(len(cards_in_db), 0)
+    assert data[1]['name'] == 'Card 1'
+    assert data[1]['cmc'] == 3.0
+    assert data[1]['type_line'] == 'Sorcery'
+    assert data[1]['image_uri'] == 'uri1'
+    assert data[1]['color_identity'] == 'R'
 
-    def test_api_delete_card_not_found(self):
-        response = self.client.delete('/cards/delete/99999') # Non-existent ID
-        self.assertEqual(response.status_code, 404)
-        json_data = response.get_json()
-        self.assertEqual(json_data['error'], "Card not found")
 
-if __name__ == '__main__':
-    unittest.main()
+def test_get_cards_filter_cmc(app_client):
+    with flask_app.app_context():
+        add_card("CMC3 Card", price=1.0, cmc=3.0, type_line="TypeA")
+        add_card("CMC4 Card", price=2.0, cmc=4.0, type_line="TypeB")
+
+    response = app_client.get('/cards?mana_cost=3')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert len(data) == 1
+    assert data[0]['name'] == 'CMC3 Card'
+    assert data[0]['cmc'] == 3.0
+
+def test_get_cards_filter_max_price(app_client):
+    with flask_app.app_context():
+        add_card("Cheap Card", price=1.50, cmc=1.0)
+        add_card("Mid Card", price=5.00, cmc=2.0)
+        add_card("Expensive Card", price=10.00, cmc=3.0)
+        add_card("Card No Price", price=None, cmc=4.0)
+
+
+    response = app_client.get('/cards?max_price=5.00')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    # Cards with price <= 5.00. Cards with NULL price are not included by `price <= ?`.
+    assert len(data) == 2
+    names = sorted([c['name'] for c in data])
+    assert names == ["Cheap Card", "Mid Card"]
+
+def test_get_cards_filter_cmc_and_max_price(app_client):
+    with flask_app.app_context():
+        add_card("Card A", price=1.0, cmc=2.0) # Match
+        add_card("Card B", price=1.0, cmc=3.0) # No match (cmc)
+        add_card("Card C", price=5.0, cmc=2.0) # No match (price)
+        add_card("Card D", price=5.0, cmc=3.0) # No match
+
+    response = app_client.get('/cards?mana_cost=2&max_price=1.50')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert len(data) == 1
+    assert data[0]['name'] == 'Card A'
+
+def test_get_cards_invalid_mana_cost(app_client):
+    response = app_client.get('/cards?mana_cost=abc')
+    assert response.status_code == 400
+    data = json.loads(response.data)
+    assert "error" in data
+    assert "Invalid mana_cost parameter" in data["error"]
+
+def test_get_cards_invalid_max_price(app_client):
+    response = app_client.get('/cards?max_price=xyz')
+    assert response.status_code == 400
+    data = json.loads(response.data)
+    assert "error" in data
+    assert "Invalid max_price parameter" in data["error"]
+
+def test_delete_card_endpoint(app_client):
+    with flask_app.app_context():
+        card_id = add_card("Deletable Card", price=1.0, cmc=1.0)
+        assert card_id is not None
+
+    response = app_client.delete(f'/cards/delete/{card_id}')
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['message'] == "Card deleted successfully"
+
+    with flask_app.app_context():
+        cards = get_cards()
+        assert len(cards) == 0
+
+def test_delete_card_not_found_endpoint(app_client):
+    response = app_client.delete('/cards/delete/9999') # Assuming 9999 does not exist
+    assert response.status_code == 404
+    data = json.loads(response.data)
+    assert data['error'] == "Card not found"
+
+# It might be good to also test the /scan and /export/csv endpoints,
+# but these are more complex due to camera interaction (mocking needed) and CSV content.
+# The prompt focused on new fields and filtering, so these are covered.
+# A test for / (index) could be added for completeness.
+def test_index_route(app_client):
+    response = app_client.get('/')
+    assert response.status_code == 200
+    assert b"Magic: The Gathering Card Scanner" in response.data # Check for a known string
+    assert b"Filter by Max Price:" in response.data # Check for new UI element
+    assert b"cardCountDisplay" in response.data # Check for new UI element
+    assert b"totalPriceDisplay" in response.data # Check for new UI element

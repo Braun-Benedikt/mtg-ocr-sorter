@@ -121,9 +121,18 @@ def get_all_cards():
     mana_cost_str = request.args.get('mana_cost')
     mana_cost = None
     if mana_cost_str:
-        try: mana_cost = int(mana_cost_str)
+        try: mana_cost = int(mana_cost_str) # The database expects float for cmc, but API uses int for mana_cost. This might need alignment. For now, respecting existing int conversion.
         except ValueError: return jsonify({"error": "Invalid mana_cost parameter"}), 400
-    cards_data = get_cards(color=color, mana_cost=mana_cost)
+
+    max_price_str = request.args.get('max_price')
+    max_price = None
+    if max_price_str:
+        try:
+            max_price = float(max_price_str)
+        except ValueError:
+            return jsonify({"error": "Invalid max_price parameter"}), 400
+
+    cards_data = get_cards(color=color, mana_cost=mana_cost, max_price=max_price)
     return jsonify(cards_data), 200
 
 @app.route('/export/csv', methods=['GET'])

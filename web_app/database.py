@@ -21,32 +21,35 @@ def init_db():
             price REAL,
             color_identity TEXT,
             image_path TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            cmc REAL,
+            type_line TEXT,
+            image_uri TEXT
         )
     ''')
     conn.commit()
     conn.close()
     print(f"Database initialized at {DATABASE_PATH}")
 
-def add_card(name: str, ocr_name_raw: str = None, price: float = None, color_identity: str = None, image_path: str = None):
+def add_card(name: str, ocr_name_raw: str = None, price: float = None, color_identity: str = None, image_path: str = None, cmc: float = 0.0, type_line: str = '', image_uri: str = ''):
     conn = get_db_connection()
     cursor = conn.cursor()
     timestamp = datetime.now()
     cursor.execute('''
-        INSERT INTO cards (name, ocr_name_raw, price, color_identity, image_path, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (name, ocr_name_raw, price, color_identity, image_path, timestamp))
+        INSERT INTO cards (name, ocr_name_raw, price, color_identity, image_path, timestamp, cmc, type_line, image_uri)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (name, ocr_name_raw, price, color_identity, image_path, timestamp, cmc, type_line, image_uri))
     card_id = cursor.lastrowid
     conn.commit()
     conn.close()
     print(f"Added card: {name}, ID: {card_id}")
     return card_id
 
-def get_cards(color: str = None, mana_cost: int = None): # Mana cost filter to be implemented later if applicable
+def get_cards(color: str = None, mana_cost: float = None, max_price: float = None):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    query = "SELECT id, name, ocr_name_raw, price, color_identity, image_path, strftime('%Y-%m-%d %H:%M:%S', timestamp) as timestamp FROM cards"
+    query = "SELECT id, name, ocr_name_raw, price, color_identity, image_path, strftime('%Y-%m-%d %H:%M:%S', timestamp) as timestamp, cmc, type_line, image_uri FROM cards"
     conditions = []
     params = []
 
@@ -58,16 +61,13 @@ def get_cards(color: str = None, mana_cost: int = None): # Mana cost filter to b
         conditions.append("color_identity LIKE ?")
         params.append(f"%{color}%")
 
-    # Mana cost filtering is not directly supported by the current card data schema.
-    # Scryfall API provides 'cmc' (converted mana cost) which is not currently stored.
-    # This will be a placeholder or needs schema adjustment if 'mana_cost' is critical.
-    # For now, the mana_cost parameter is ignored in the SQL query.
     if mana_cost is not None:
-        # Placeholder: print("Mana cost filtering is not yet fully implemented for the current schema.")
-        # If 'cmc' or similar was stored, it would be:
-        # conditions.append("mana_cost = ?") # or cmc = ?
-        # params.append(mana_cost)
-        pass
+        conditions.append("cmc = ?")
+        params.append(mana_cost)
+
+    if max_price is not None:
+        conditions.append("price <= ?")
+        params.append(max_price)
 
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
@@ -96,19 +96,29 @@ if __name__ == '__main__':
     print("Initializing database...")
     init_db()
     print("Adding sample cards...")
-    add_card("Sol Ring", ocr_name_raw="Sol Ring", price=1.50, color_identity="C", image_path="path/to/sol_ring.jpg")
-    add_card("Island", ocr_name_raw="Island", price=0.10, color_identity="U", image_path="path/to/island.jpg")
-    add_card("Lightning Bolt", ocr_name_raw="Lightning Bolt", price=0.50, color_identity="R", image_path="path/to/lightning_bolt.jpg")
+    add_card("Sol Ring", ocr_name_raw="Sol Ring", price=1.50, color_identity="C", image_path="path/to/sol_ring.jpg", cmc=1.0, type_line="Artifact", image_uri="http://example.com/sol_ring.png")
+    add_card("Island", ocr_name_raw="Island", price=0.10, color_identity="U", image_path="path/to/island.jpg", cmc=0.0, type_line="Basic Land — Island", image_uri="http://example.com/island.png")
+    add_card("Lightning Bolt", ocr_name_raw="Lightning Bolt", price=0.50, color_identity="R", image_path="path/to/lightning_bolt.jpg", cmc=1.0, type_line="Instant", image_uri="http://example.com/lightning_bolt.png")
 
     print("\nAll cards:")
     all_c = get_cards()
     for c in all_c:
-        print(dict(c))
+        print(f"ID: {c['id']}, Name: {c['name']}, OCR: {c['ocr_name_raw']}, Price: {c['price']}, Colors: {c['color_identity']}, Path: {c['image_path']}, Timestamp: {c['timestamp']}, CMC: {c['cmc']}, Type: {c['type_line']}, Scryfall URI: {c['image_uri']}")
 
     print("\nCards with color 'U':")
     blue_cards = get_cards(color="U")
     for c in blue_cards:
-        print(dict(c))
+        print(f"ID: {c['id']}, Name: {c['name']}, Price: {c['price']}, CMC: {c['cmc']}, Type: {c['type_line']}")
+
+    print("\nCards with CMC = 1.0:")
+    cmc_1_cards = get_cards(mana_cost=1.0)
+    for c in cmc_1_cards:
+        print(f"ID: {c['id']}, Name: {c['name']}, Price: {c['price']}, CMC: {c['cmc']}, Type: {c['type_line']}")
+
+    print("\nCards with Price <= 0.50:")
+    cheap_cards = get_cards(max_price=0.50)
+    for c in cheap_cards:
+        print(f"ID: {c['id']}, Name: {c['name']}, Price: {c['price']}, CMC: {c['cmc']}, Type: {c['type_line']}")
 
     # Test DB initialization by running this script directly
     # To ensure the DB is created in the web_app directory as expected.
@@ -121,7 +131,7 @@ if __name__ == '__main__':
     print("\nTesting delete_card function...")
     # Assuming card with ID 1 exists from previous sample data
     # First, let's add a card to ensure it exists
-    test_card_id = add_card("Test Card for Deletion", ocr_name_raw="Test Del", price=0.10, color_identity="B")
+    test_card_id = add_card("Test Card for Deletion", ocr_name_raw="Test Del", price=0.10, color_identity="B", cmc=3.0, type_line="Creature", image_uri="http://example.com/test_card.png")
     if test_card_id:
         print(f"Added card with ID: {test_card_id} for deletion test.")
         cards_before_delete = get_cards()
