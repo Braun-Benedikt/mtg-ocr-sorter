@@ -81,6 +81,19 @@ def get_cards(color: str = None, mana_cost: float = None, max_price: float = Non
     # Convert sqlite3.Row objects to dictionaries for easier JSON serialization
     return [dict(card) for card in cards]
 
+def get_legendary_creatures():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    query = "SELECT id, name, ocr_name_raw, price, color_identity, image_path, strftime('%Y-%m-%d %H:%M:%S', timestamp) as timestamp, cmc, type_line, image_uri FROM cards WHERE type_line LIKE 'Legendary Creature%'"
+
+    cursor.execute(query)
+    cards = cursor.fetchall()
+    conn.close()
+
+    # Convert sqlite3.Row objects to dictionaries for easier JSON serialization
+    return [dict(card) for card in cards]
+
 def delete_card(card_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -157,3 +170,11 @@ if __name__ == '__main__':
     print(f"\nAttempting to delete non-existent card ID: {non_existent_id}")
     delete_non_existent_success = delete_card(non_existent_id)
     print(f"Deletion of non-existent card ID {non_existent_id} was {'successful' if delete_non_existent_success else 'unsuccessful (expected)'}.")
+
+    print("\nLegendary Creatures:")
+    legendary_cards = get_legendary_creatures()
+    if legendary_cards:
+        for lc in legendary_cards:
+            print(f"ID: {lc['id']}, Name: {lc['name']}, Type: {lc['type_line']}")
+    else:
+        print("No legendary creatures found.")
