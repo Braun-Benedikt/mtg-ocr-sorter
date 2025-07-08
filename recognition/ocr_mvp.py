@@ -191,21 +191,48 @@ def capture_images_from_camera() -> str | None:
 
 def extract_card_name_area(image: np.ndarray,
                            hr_start: float = None, hr_end: float = None,
-                           wr_start: float = None, wr_end: float = None):
+                           wr_start: float = None, wr_end: float = None,
+                           width_modifier_factor: float = 0.0):
     """
     Extracts the card name area from an image using specified ratios.
     If ratios are not provided, it uses the current global CROP_RATIO_* constants from the module.
+    A width_modifier_factor can be provided to adjust the width of the crop area.
     """
     h, w = image.shape[:2]
 
     # Use current global values if specific ratios are not provided
-    # These local variables will hold the ratios to be used.
-    actual_hr_start = hr_start if hr_start is not None else CROP_RATIO_HEIGHT_START
-    actual_hr_end = hr_end if hr_end is not None else CROP_RATIO_HEIGHT_END
-    actual_wr_start = wr_start if wr_start is not None else CROP_RATIO_WIDTH_START
-    actual_wr_end = wr_end if wr_end is not None else CROP_RATIO_WIDTH_END
+    _hr_start = hr_start if hr_start is not None else CROP_RATIO_HEIGHT_START
+    _hr_end = hr_end if hr_end is not None else CROP_RATIO_HEIGHT_END
+    _wr_start = wr_start if wr_start is not None else CROP_RATIO_WIDTH_START
+    _wr_end = wr_end if wr_end is not None else CROP_RATIO_WIDTH_END
 
-    cropped_img = image[int(h * actual_hr_start):int(h * actual_hr_end), int(w * actual_wr_start):int(w * actual_wr_end)]
+    if width_modifier_factor != 0.0:
+        original_width_ratio = _wr_end - _wr_start
+        width_change_ratio = original_width_ratio * width_modifier_factor
+
+        # Adjust start and end width ratios, ensuring they stay within [0, 1]
+        # The change is distributed equally to maintain the center
+        new_wr_start = _wr_start - (width_change_ratio / 2.0)
+        new_wr_end = _wr_end + (width_change_ratio / 2.0)
+
+        # Clamp values to be within [0.0, 1.0]
+        # Also ensure start is less than end, though symmetric adjustment should maintain this if original is valid
+        _wr_start = max(0.0, min(new_wr_start, 1.0))
+        _wr_end = max(0.0, min(new_wr_end, 1.0))
+
+        # Ensure wr_start is still less than wr_end after clamping,
+        # otherwise, it might result in an invalid crop.
+        # If they become invalid (e.g. start >= end), fallback to original for safety,
+        # or handle as an error. For now, let's be cautious.
+        if _wr_start >= _wr_end:
+            # Fallback to original if modification results in invalid range
+            _wr_start = wr_start if wr_start is not None else CROP_RATIO_WIDTH_START
+            _wr_end = wr_end if wr_end is not None else CROP_RATIO_WIDTH_END
+            # Optionally, log a warning here
+            print(f"Warning: width_modifier_factor {width_modifier_factor} resulted in invalid crop ratios. Using original width.")
+
+
+    cropped_img = image[int(h * _hr_start):int(h * _hr_end), int(w * _wr_start):int(w * _wr_end)]
 
     return cropped_img
 
@@ -311,11 +338,65 @@ def process_image_to_db(image_path: str, corrector: CardNameCorrector, show_gui:
         print(f"Error loading image {image_path}, cannot process.")
         return None # Indicate failure
 
-    cropped = extract_card_name_area(image_cv)
-    ocr_raw, ocr_corrected = extract_card_name(cropped, corrector)
+    # Define width adjustment factors for retries:
+    # 1. Original
+    # 2. Slightly wider
+    # 3. Even wider
+    # 4. Slightly narrower
+    # 5. Even narrower
+    width_modifier_factors = [0.0, 0.02, 0.04, -0.02, -0.04]
+
+    ocr_raw = ""
+    ocr_corrected = ""
+    cropped = None # Initialize cropped, it will be set in the loop
+
+    for i, modifier in enumerate(width_modifier_factors):
+        print(f"Attempt {i+1}/5: Trying width modifier {modifier:.2f}")
+        current_cropped_area = extract_card_name_area(image_cv, width_modifier_factor=modifier)
+
+        # Check if cropping was successful (returned a non-empty image)
+        if current_cropped_area is None or current_cropped_area.size == 0:
+            print(f"Warning: Cropping with modifier {modifier:.2f} resulted in an empty image. Skipping OCR for this attempt.")
+            # ocr_raw will remain as from previous attempt or empty
+            # ocr_corrected will remain as from previous attempt or empty
+            if i == 0: # Store the first crop attempt (original) in case all fail
+                cropped = current_cropped_area
+            continue
+
+        if i == 0: # Store the first crop attempt (original) for display/DB even if later attempts succeed
+            cropped = current_cropped_area
+
+        temp_ocr_raw, temp_ocr_corrected = extract_card_name(current_cropped_area, corrector)
+
+        if not ocr_raw: # Store the first raw OCR text
+             ocr_raw = temp_ocr_raw
+
+        if temp_ocr_corrected:
+            print(f"Success on attempt {i+1} with modifier {modifier:.2f}. Card: {temp_ocr_corrected}")
+            ocr_corrected = temp_ocr_corrected
+            # If an early attempt (e.g. wider) found a card, we might prefer its crop for context
+            # For now, 'cropped' is always the one from the *first* attempt (modifier 0.0).
+            # If a *different* crop led to success, 'current_cropped_area' has that specific crop.
+            # The GUI function show_image_gui uses 'cropped', which is the original crop.
+            # This might be fine, or we might want to pass the successful crop to the GUI.
+            # For now, keeping 'cropped' as the original crop for GUI consistency.
+            break # Exit loop on first successful correction
+        else:
+            print(f"Attempt {i+1} with modifier {modifier:.2f} did not yield a corrected name.")
+            if not ocr_corrected and i == len(width_modifier_factors) -1 : # if it's the last attempt and still no corrected name
+                ocr_raw = temp_ocr_raw # Update with the last raw OCR if all failed
+
+    # Ensure 'cropped' is not None if all attempts failed to crop (e.g., very small image)
+    # If it's still None here, it means even the first attempt (modifier 0.0) failed to produce a crop.
+    if cropped is None:
+        print(f"Critical: All cropping attempts failed for {image_path}. Using a dummy empty crop.")
+        # Create a minimal black 1x1 pixel image as a fallback to prevent crashes downstream
+        # if functions expect a non-None np.ndarray.
+        cropped = np.zeros((1, 1, 3), dtype=np.uint8)
+        # ocr_raw and ocr_corrected will be empty.
 
     if not ocr_corrected:
-        print(f"No card name could be reliably extracted for {image_path}.")
+        print(f"All {len(width_modifier_factors)} attempts failed to reliably extract a card name for {image_path}.")
         # Optionally, still save with raw OCR if needed, or just return
         # add_card(name="UNKNOWN", ocr_name_raw=ocr_raw, image_path=image_path)
         return None # Indicate failure to identify a card
