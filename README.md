@@ -1,141 +1,255 @@
 # Magic: The Gathering Card Sorter & Cataloger
 
-## Description
-This project aims to catalog and sort Magic: The Gathering (MTG) cards using image recognition. It is designed to run on a Raspberry Pi connected to a physical sorting machine. The project is currently in development.
+## 1. Description
+This project aims to catalog and sort Magic: The Gathering (MTG) cards using image recognition. It is primarily designed with the Raspberry Pi in mind, envisioning future integration with a physical card sorting machine. The application allows users to scan cards, identify them using OCR and advanced name correction, fetch detailed information from online databases, and manage their collection through both a command-line interface and a user-friendly web application. The project is currently in active development.
 
-## Current Features
-*   `main.py` serves as the main Command Line Interface (CLI) entry point for the application.
-*   Image-based card identification using OCR (Tesseract) to extract card names and fuzzy name correction (SymSpell).
-*   Fetching card details (e.g., price, color identity) from the Scryfall API.
-*   Primary data storage via a database, with CSV export functionality available through the web application.
-*   Web interface for enhanced user interaction, including:
-    *   Card scanning via connected camera.
-    *   List view of all cataloged cards.
-    *   Filtering capabilities (e.g., by color, mana cost).
-    *   CSV export of the card database.
+## 2. Features
 
-## Project Structure
-*   `main.py`: CLI entry point for batch processing of images and direct camera input.
-*   `web_app/app.py`: Entry point for the Flask web application, providing an interactive user interface for card scanning, viewing, and database management.
-*   `recognition/`: Contains the card recognition logic.
-    *   `ocr_mvp.py`: Core module for image processing (OCR, fuzzy matching), utilized by both `main.py` and the web app.
-    *   `fuzzy_match.py`: Implements the card name correction using SymSpell.
-    *   `cards/`: Stores dictionary files for SymSpell.
-*   `tools/`: Contains scripts for building and maintaining the card dictionary.
-    *   `build_symspell_dictionary.py`: Fetches card names from Scryfall to create the initial SymSpell dictionary.
+*   **Card Identification:**
+    *   **Image Capture:** Supports image input from files or direct capture using `libcamera-still` on compatible systems (e.g., Raspberry Pi).
+    *   **OCR Technology:** Utilizes Tesseract OCR to extract text from card images, focusing on the card name area.
+    *   **Fuzzy Name Correction:** Implements SymSpell for robust fuzzy matching, correcting common OCR errors against a comprehensive MTG card name dictionary.
+    *   **Interactive Crop Configuration:** A tool to visually define the card name area on an image, optimizing recognition accuracy. Accessible via CLI and Web UI.
+*   **Data Enrichment (Scryfall API):**
+    *   Automatically fetches detailed card information for recognized cards, including current market price (EUR/USD), color identity, Converted Mana Cost (CMC), full type line, and card image URI from the Scryfall API.
+*   **Database Storage (SQLite):**
+    *   Stores cataloged card details in a local SQLite database (`web_app/magic_cards.db`).
+    *   Key data points include: ID, recognized name, raw OCR text, price, color identity, image path (local), timestamp, CMC, type line, and Scryfall image URI.
+*   **Command-Line Interface (`main.py`):**
+    *   Process card images in batches from a specified directory.
+    *   Capture and process images directly from a connected camera.
+    *   Initialize or re-initialize the card database.
+    *   Access the interactive crop area configuration tool.
+*   **Web Application (`web_app/app.py`):**
+    *   **Real-time Card Scanning:** Scan cards using a connected camera, with results appearing dynamically in the collection.
+    *   **Comprehensive Card List:** View all cataloged cards with their details.
+    *   **Advanced Filtering:** Filter the card list by color identity (e.g., W, UB, RUG), Converted Mana Cost (CMC), and maximum price.
+    *   **CSV Export:** Download the entire card database as a CSV file.
+    *   **Card Deletion:** Easily remove cards from the database via the web interface.
+    *   **Web-Triggered Crop Configuration:** Initiate the crop area setup process from the web UI (interaction occurs in the server console).
+    *   **EDHREC Deck Suggestions:** Recommends a Commander and a list of owned cards for a potential deck, based on your collected legendary creatures and suggestions from EDHREC.
+*   **Dictionary Management:**
+    *   Includes tools to build an initial card name dictionary by fetching data from Scryfall.
+    *   Provides scripts to clean and process this dictionary for optimal use with SymSpell.
+
+## 3. Project Structure
+
+*   `main.py`: Command-Line Interface (CLI) entry point.
+*   `web_app/`: Contains the Flask web application.
+    *   `app.py`: Main Flask application file, defines routes and web functionalities.
+    *   `database.py`: Handles all SQLite database interactions (initialization, CRUD operations).
+    *   `magic_cards.db`: Default SQLite database file created in this directory.
+    *   `static/`: Contains static assets like CSS (`style.css`) and JavaScript (`script.js`).
+    *   `templates/`: HTML templates for the web interface (`index.html`, `suggestions.html`).
+*   `recognition/`: Core image recognition and card processing logic.
+    *   `ocr_mvp.py`: Handles image capture, OCR, cropping, Scryfall API interaction, and saving card data.
+    *   `fuzzy_match.py`: Implements the `CardNameCorrector` class using SymSpell for name correction.
+    *   `cards/`: Stores dictionary files for SymSpell (e.g., `card_names_symspell_clean.txt`).
+*   `tools/`: Utility scripts.
+    *   `build_symspell_dictionary.py`: Fetches card names from Scryfall to create the initial dictionary.
     *   `symspell_dict_bereinigung.py`: Cleans and processes the dictionary file.
-*   `tests/`: Directory for unit tests (currently under development).
+*   `tests/`: Contains unit tests and test resources.
+    *   `test_images/`: Sample images for testing.
+    *   Python test files (e.g., `test_ocr_mvp.py`, `test_web_app.py`).
 *   `requirements.txt`: Lists Python dependencies for the project.
 *   `README.md`: This file.
 
-## Setup Instructions
-### Python
-Python 3.x required.
+## 4. Prerequisites
 
-### Tesseract OCR
-*   Tesseract OCR must be installed and accessible in your system's PATH for the OCR functionality to work.
-*   Installation instructions can be found at: [https://tesseract-ocr.github.io/tessdoc/Installation.html](https://tesseract-ocr.github.io/tessdoc/Installation.html)
-*   Ensure that the Tesseract command (`tesseract`) is available system-wide. `pytesseract` (used by the application) typically relies on this.
+*   **Operating System:** Developed on Linux (Raspberry Pi OS). Should be compatible with other OSs where Python and Tesseract can be installed, but camera functionality is Linux-focused.
+*   **Python:** Python 3.x (developed with 3.9+).
+*   **Tesseract OCR:**
+    *   Must be installed and accessible in your system's PATH.
+    *   Installation instructions: [Tesseract OCR Documentation](https://tesseract-ocr.github.io/tessdoc/Installation.html)
+    *   Ensure the `tesseract` command is available. `pytesseract` (used by this project) relies on it.
+*   **`libcamera-utils` (for Raspberry Pi Camera Users):**
+    *   If using the camera feature on a Raspberry Pi with a libcamera-based camera module, `libcamera-utils` (which includes `libcamera-still`) must be installed.
+    *   Typically installed via: `sudo apt update && sudo apt install libcamera-utils`
 
-### Python Dependencies
-*   Install dependencies using pip:
+## 5. Installation
+
+1.  **Clone the Repository (if you haven't already):**
+    ```bash
+    git clone <repository_url>
+    cd <repository_directory>
+    ```
+2.  **Set up a Python Virtual Environment (Recommended):**
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    ```
+3.  **Install Python Dependencies:**
     ```bash
     pip install -r requirements.txt
     ```
+4.  **Verify Tesseract OCR Installation:**
+    Ensure Tesseract is installed and correctly configured as per the Prerequisites section.
+5.  **Set Up the Card Name Dictionary:**
+    The dictionary is crucial for accurate card name correction. Generate it by running the following scripts from the project's root directory:
+    *   **Step 1: Build initial dictionary from Scryfall:**
+        ```bash
+        python tools/build_symspell_dictionary.py
+        ```
+        This creates `recognition/cards/card_names_symspell.txt`.
+    *   **Step 2: Clean and process the dictionary:**
+        ```bash
+        python tools/symspell_dict_bereinigung.py
+        ```
+        This creates the final `recognition/cards/card_names_symspell_clean.txt`, which is used by the application.
+    *   **Verification:** Ensure `recognition/cards/card_names_symspell_clean.txt` has been successfully created.
 
-### Card Dictionary
-The card dictionary is essential for accurate fuzzy name correction. To generate or update it:
-1.  Ensure you are in the project's root directory.
-2.  Run `python tools/build_symspell_dictionary.py`. This script fetches card names from Scryfall and creates the initial dictionary at `recognition/cards/card_names_symspell.txt`.
-3.  Run `python tools/symspell_dict_bereinigung.py`. This script cleans the dictionary from the previous step and saves the processed version to `recognition/cards/card_names_symspell_clean.txt`.
+## 6. Configuration
 
-(Note: The application (`main.py` and `web_app/app.py`) expects the dictionary files to be located in `recognition/cards/`. The tool scripts are configured to place the generated files there when executed from the project root directory. The paths within `recognition/ocr_mvp.py` and `recognition/fuzzy_match.py` for accessing these dictionary files are relative to their own script locations.)
+*   **Crop Area Configuration:**
+    *   **Purpose:** To optimize card name recognition accuracy by precisely defining the area where the card's name is located on the image. This is highly recommended, especially if recognition results are poor.
+    *   **How to Run:**
+        *   **CLI:** Execute `python main.py --configure_crop` from the project root. An image will be captured (or a dummy image used), and a Matplotlib window will appear. Select the name area and close the window.
+        *   **Web Application:** Click the "Configure Crop Area" button on the main page. This triggers the same interactive process, which will occur in the console/terminal where the `web_app/app.py` server is running.
+    *   **How it Works:** The selection updates internal ratio constants within `recognition/ocr_mvp.py`, which are then used for all subsequent image cropping. These settings persist as long as the application is running or until reconfigured.
+*   **Tesseract Path (Optional Manual Override):**
+    *   If Tesseract is installed but not in your system's PATH, you can manually set the path to the Tesseract executable within `recognition/ocr_mvp.py`. Look for the `pytesseract.pytesseract.tesseract_cmd` line. This is primarily relevant for Windows users who install Tesseract to a custom location.
+*   **Dictionary Path (CLI Only):**
+    *   The `main.py` script accepts a `-d` or `--dict_path` argument to specify a custom location for the SymSpell dictionary file. The web application uses a default path (`recognition/cards/card_names_symspell_clean.txt`).
 
-## Command-Line Usage (main.py)
-The primary command-line interface for the application is `main.py`. It allows for batch processing of images from a directory or direct input from a camera.
+## 7. Usage
 
-### Basic Execution
-To run the CLI application, navigate to the project root directory and use:
-```bash
-python main.py [OPTIONS]
-```
+### A. Command-Line Interface (`main.py`)
 
-### Key Command-Line Arguments
-*   `-i, --image_dir PATH`: Specifies the directory containing card images to process.
-    *   Default: `tests/test_images` (relative to the project root).
-*   `-d, --dict_path PATH`: Sets the path to the SymSpell dictionary file.
-    *   Default: `recognition/cards/card_names_symspell_clean.txt` (relative to the project root).
-*   `-uc, --use_camera`: Use a connected camera for image input instead of processing a directory. If this flag is present, `--image_dir` is ignored.
-*   `-ng, --no_gui`: Disables the GUI image preview when processing images from a directory.
-*   `--init_db`: Initializes or re-initializes the database before any processing. This is useful for a fresh start or schema updates.
-*   `--configure_crop`: Starts an interactive tool to configure the card image cropping area. This helps optimize recognition accuracy.
+The CLI is suitable for batch processing images or quick tests with a camera.
 
-### Examples
-*   Process images from the default directory:
+*   **Basic Execution:**
+    Navigate to the project root directory and run:
     ```bash
-    python main.py
-    ```
-*   Process images from a custom directory:
-    ```bash
-    python main.py --image_dir path/to/your/images
-    ```
-*   Use camera input:
-    ```bash
-    python main.py --use_camera
-    ```
-*   Initialize the database and then process images:
-    ```bash
-    python main.py --init_db --image_dir path/to/your/images
-    ```
-*   Configure cropping settings:
-    ```bash
-    python main.py --configure_crop
+    python main.py [OPTIONS]
     ```
 
-The application primarily stores data in a database. CSV export is available via the web interface.
+*   **Key Command-Line Arguments:**
+    *   `-i, --image_dir PATH`: Specifies the directory containing card images to process.
+        *   Default: `tests/test_images` (relative to project root).
+    *   `-d, --dict_path PATH`: Sets the path to the SymSpell dictionary file.
+        *   Default: `recognition/cards/card_names_symspell_clean.txt` (relative to project root).
+    *   `-ng, --no_gui`: Disables the Tkinter-based GUI image preview when processing images from a directory.
+    *   `-uc, --use_camera`: Use a connected camera for image input instead of processing a directory. If this flag is present, `--image_dir` is ignored.
+    *   `--init_db`: Initializes or re-initializes the database (`web_app/magic_cards.db`) before any processing. Useful for a fresh start.
+    *   `--configure_crop`: Starts the interactive tool to configure the card image cropping area.
 
-## Future Goals
-*   Full integration with a Raspberry Pi and a physical card sorting machine, including hardware control.
-*   Comprehensive unit and integration testing to ensure robustness.
-*   Ongoing improvements to error handling, logging, and configuration flexibility.
-*   Enhanced card data model (e.g., storing set information, foil status, etc.).
+*   **Examples:**
+    *   Process images from the default directory:
+        ```bash
+        python main.py
+        ```
+    *   Process images from a custom directory:
+        ```bash
+        python main.py --image_dir path/to/your/images
+        ```
+    *   Use camera input (ensure camera is configured and `libcamera-still` is available if on RPi):
+        ```bash
+        python main.py --use_camera
+        ```
+    *   Initialize the database and then process images:
+        ```bash
+        python main.py --init_db --image_dir path/to/your/images
+        ```
+    *   Configure cropping settings:
+        ```bash
+        python main.py --configure_crop
+        ```
 
-## Web Interface Setup and Usage
+### B. Web Application (`web_app/app.py`)
 
-The project now includes a web interface to interact with the card scanner.
+The web application provides a richer, interactive experience for managing your card collection.
 
-### Prerequisites
+*   **Running the Web Server:**
+    1.  Navigate to the project's root directory.
+    2.  Start the Flask web server:
+        ```bash
+        python web_app/app.py
+        ```
+    3.  The server will typically start on `0.0.0.0:5000`, making it accessible from other devices on the same network.
 
-1.  **Python Dependencies**: Install all required Python packages:
-    ```bash
-    pip install -r requirements.txt
-    ```
-    This includes Flask (for the web server) and other necessary libraries.
-2.  **Tesseract OCR**: Tesseract OCR must be installed and accessible in your system's PATH. It is used by the backend for card name recognition. Refer to the "Tesseract OCR" subsection under "Setup Instructions" for more details.
-3.  **Card Dictionary**: A valid SymSpell dictionary file (e.g., `recognition/cards/card_names_symspell_clean.txt`) must be present. This file is crucial for correcting OCR'd card names. Refer to the "Card Dictionary" subsection under "Setup Instructions" for generation steps.
-4.  **Camera (Optional for Scanning)**: For the "Scan Card" feature to work with a physical camera (especially on Raspberry Pi), `libcamera-still` should be installed and functional. The server will warn if it's not detected.
+*   **Accessing the Web Interface:**
+    1.  Open a web browser on a device connected to the same network as the machine running the server.
+    2.  Navigate to `http://<SERVER_IP_ADDRESS>:5000`. Replace `<SERVER_IP_ADDRESS>` with the actual IP address of your server (e.g., your Raspberry Pi's IP). If running locally for testing, use `http://127.0.0.1:5000` or `http://localhost:5000`.
 
-### Running the Web Server
+*   **Features and How to Use:**
+    *   **Main Page (`/`):**
+        *   Displays the list of currently cataloged cards.
+        *   Provides a "Scan Card" button.
+        *   Shows filter options (Color, Mana Cost, Max Price).
+        *   Links/buttons for "Download CSV", "Configure Crop Area", and "Deck Suggestions".
+    *   **Scan Card:**
+        *   Click the "Scan Card" button. This triggers the connected camera to capture an image.
+        *   The system processes the image, identifies the card, fetches its data, and adds it to the database. The card list updates automatically.
+    *   **Card List & Filters:**
+        *   The main page displays cards from the database.
+        *   **Color:** Enter color letters (W, U, B, R, G, or combinations like WU, BRG) to filter by color identity.
+        *   **Mana Cost (CMC):** Enter a number to filter by Converted Mana Cost.
+        *   **Max Price:** Enter a number to filter cards up to that maximum price.
+        *   Click "Apply Filters" to update the list. Click "Clear Filters" to reset.
+    *   **Download CSV (`/export/csv`):**
+        *   Click the "Download CSV" button to export all card data currently in the database to a `scanned_cards.csv` file.
+    *   **Delete Card:**
+        *   Each card in the list has a "Delete" button. Clicking it will remove the card from the database.
+    *   **Configure Crop Area:**
+        *   Click the "Configure Crop Area" button. This initiates the interactive crop setup process in the server's console window (similar to the CLI version).
+    *   **Deck Suggestions (`/deck_suggestions`):**
+        *   Click the "Deck Suggestions" button/link.
+        *   The system identifies legendary creatures in your collection.
+        *   It then queries EDHREC for popular cards associated with those commanders.
+        *   It determines which commander has the most matching cards already in your collection and displays the commander, the list of owned suggested cards, and the match count.
 
-1.  Navigate to the project's root directory.
-2.  Start the Flask web server:
-    ```bash
-    python web_app/app.py
-    ```
-3.  The server will typically start on `0.0.0.0:5000`, meaning it's accessible from other devices on the same network.
+## 8. Database
 
-### Accessing the Web Interface
+*   **Storage:** Card data is stored in an SQLite database.
+*   **Default File Location:** `web_app/magic_cards.db` (created automatically in the `web_app` directory if it doesn't exist upon app startup or DB initialization).
+*   **Content:** Stores details for each cataloged card, including name, OCR data, price, color identity, image URI, etc.
+*   **Export:** The entire database can be exported to a CSV file via the web interface.
 
-1.  Open a web browser on a device connected to the same network as your Raspberry Pi (or the machine running the server).
-2.  Navigate to `http://<YOUR_RASPBERRY_PI_IP_ADDRESS>:5000`. Replace `<YOUR_RASPBERRY_PI_IP_ADDRESS>` with the actual IP address of your Raspberry Pi. If running on a local machine for testing, you can use `http://127.0.0.1:5000` or `http://localhost:5000`.
+## 9. Tools
 
-### Using the Interface
+The `tools/` directory contains scripts essential for the application's accuracy:
 
-*   **Scan Card**: Click the "Scan Card" button to trigger the camera (if connected and configured) to capture an image. The system will attempt to OCR the card, identify it, and save its details. The card list will update automatically.
-*   **Card List**: Displays all cards currently stored in the database.
-*   **Filters**:
-    *   **Color**: Enter a color letter (e.g., W, U, B, R, G) or combination (e.g., WU, BR) to filter cards by their color identity.
-    *   **Mana Cost (CMC)**: Enter a number to filter by Converted Mana Cost. (Note: This filter's effectiveness depends on whether CMC data is available and accurately stored for scanned cards).
-    *   Click "Apply Filters" to refresh the card list based on your criteria.
-    *   Click "Clear Filters" to remove all filter criteria and show all cards.
-*   **Download CSV**: Click the "Download CSV" button to export all card data currently in the database as a CSV file.
+*   `tools/build_symspell_dictionary.py`:
+    *   This script fetches a list of all MTG card names from the Scryfall API.
+    *   It creates an initial, raw dictionary file (`recognition/cards/card_names_symspell.txt`).
+*   `tools/symspell_dict_bereinigung.py`:
+    *   This script processes the raw dictionary generated by `build_symspell_dictionary.py`.
+    *   It cleans the names (e.g., removing special characters or formatting unsuitable for SymSpell) and prepares the final dictionary (`recognition/cards/card_names_symspell_clean.txt`).
+*   **Importance:** Running these tools in sequence is crucial for the `CardNameCorrector` to function effectively and provide accurate fuzzy matching for OCR'd card names.
+
+## 10. Testing
+
+*   The `tests/` directory contains various Python scripts for unit and integration testing.
+    *   Examples include `test_ocr_mvp.py`, `test_fuzzy_match.py`, `test_web_app.py`, and `test_camera_integration.py`.
+*   `tests/test_images/` provides a small set of sample card images that can be used with `main.py` (it's the default image directory).
+*   To run tests, you would typically use a test runner like `pytest` (not explicitly configured in the project yet, but tests are structured to be compatible). For now, some tests might be runnable directly or via their `if __name__ == "__main__":` blocks.
+
+## 11. Troubleshooting
+
+*   **"libcamera-still not found" or Camera Issues (Raspberry Pi):**
+    *   Ensure `libcamera-utils` is installed: `sudo apt install libcamera-utils`.
+    *   Verify the camera is properly connected and configured in `raspi-config`.
+    *   The web application will show a warning if `libcamera-still` is not detected at startup, and the "Scan Card" feature will likely fail.
+*   **"Dictionary file not found" (e.g., `recognition/cards/card_names_symspell_clean.txt`):**
+    *   You must run the dictionary generation scripts as described in the "Installation" section (step 5).
+    *   The web application might create a placeholder dummy dictionary on startup if the file is missing, but card name correction will not work correctly.
+*   **Tesseract OCR Not Found or Not Working:**
+    *   Confirm Tesseract OCR is installed correctly on your system.
+    *   Ensure the `tesseract` command is in your system's PATH.
+    *   For Windows, if installed to a non-default location, you might need to set `pytesseract.pytesseract.tesseract_cmd` in `recognition/ocr_mvp.py`.
+*   **Low Card Name Recognition Accuracy:**
+    *   **Use the Crop Configuration Tool:** This is the most important step. Access it via `python main.py --configure_crop` or the "Configure Crop Area" button in the web app. Accurately selecting the name region significantly improves OCR.
+    *   **Lighting and Focus:** Ensure good, even lighting on the card and that the camera is focused correctly. Shadows and glare can severely impact OCR.
+    *   **Card Condition:** Very worn or damaged cards might be harder to recognize.
+*   **Web App Issues (e.g., 404 errors, features not working):**
+    *   Ensure the Flask server (`python web_app/app.py`) is running without errors in the console.
+    *   Check for any error messages in the server console output.
+    *   Verify all dependencies in `requirements.txt` are installed in your active Python environment.
+
+## 12. Future Goals / Roadmap
+
+*   Full integration with a Raspberry Pi and a physical card sorting machine, including hardware control components.
+*   Comprehensive unit and integration testing suite with automated runs.
+*   Ongoing improvements to error handling, logging capabilities, and overall configuration flexibility.
+*   Enhanced card data model (e.g., storing MTG set information, foil status, card language).
+*   Improved UI/UX for the web application.
