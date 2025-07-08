@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deck Suggestions</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .commander-card img {
+            max-width: 200px; /* Or a suitable size */
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+        li:last-child {
+            border-bottom: none;
+        }
+        a.button-back {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+        }
+        a.button-back:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Deck Suggestions</h1>
+
+        {% if error_message %}
+            <p style="color: red;">{{ error_message }}</p>
+        {% elif message %}
+            <p>{{ message }}</p>
+        {% elif commander_name and suggested_cards %}
+            <h2>Best Commander for You: {{ commander_name }}</h2>
+            <p>Found {{ match_count }} matching cards in your collection!</p>
+
+            {% if commander_image_uri %}
+                <div class="commander-card">
+                    <img src="{{ commander_image_uri }}" alt="{{ commander_name }}">
+                </div>
+            {% endif %}
+
+            <h3>Suggested Cards You Own:</h3>
+            {% if suggested_cards %}
+                <ul>
+                    {% for card in suggested_cards %}
+                        <li>{{ card }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No specific EDHREC suggested cards found in your collection for this commander, though it was the best match overall.</p>
+            {% endif %}
+        {% else %}
+            <!-- Fallback message, though covered by message/error_message -->
+            <p>No suggestions available at the moment. Try adding more cards to your collection!</p>
+        {% endif %}
+
+        <a href="{{ url_for('index') }}" class="button-back">Back to Main Page</a>
+    </div>
+</body>
+</html>

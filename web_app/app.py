@@ -6,6 +6,8 @@ import io
 import csv
 from pathlib import Path # Crucial import
 import subprocess # For libcamera-still check in if __name__ == '__main__'
+import requests # For fetching EDHREC data
+import re # For formatting commander names
 
 # --- sys.path modification ---
 # This logic assumes app.py is located inside the 'web_app' directory.
@@ -25,7 +27,7 @@ if str(project_root_folder) not in sys.path:
 
 # Now, project-specific imports
 try:
-    from web_app.database import init_db, add_card, get_cards, delete_card
+    from web_app.database import init_db, add_card, get_cards, delete_card, get_legendary_creatures
 except ModuleNotFoundError as e:
     print(f"ERROR: Could not import database module from web_app.database: {e}")
     print(f"Project root: {project_root_folder}, sys.path: {sys.path}")
@@ -34,6 +36,7 @@ except ModuleNotFoundError as e:
     def add_card(name, **kwargs): print(f"DUMMY add_card: {name}"); return None
     def get_cards(**kwargs): print("DUMMY get_cards"); return []
     def delete_card(card_id): print(f"DUMMY delete_card: {card_id}"); return False
+    def get_legendary_creatures(): print("DUMMY get_legendary_creatures"); return []
 
 try:
     from recognition.ocr_mvp import capture_images_from_camera, process_image_to_db, CardNameCorrector, setup_crop_interactively
@@ -134,6 +137,132 @@ def get_all_cards():
 
     cards_data = get_cards(color=color, mana_cost=mana_cost, max_price=max_price)
     return jsonify(cards_data), 200
+
+def fetch_all_edhrec_cards(commander_name: str):
+    """
+    Fetches card recommendations for a given commander from EDHREC.
+    """
+    def format_commander_name(name: str) -> str:
+        """
+        Formats the commander name for the EDHREC URL.
+        e.g., "Ao, Merchant of White" -> "ao-merchant-of-white"
+        """
+        name = name.lower()
+        # Remove apostrophes and commas
+        name = re.sub(r"['|,]", "", name)
+        # Replace spaces and other non-alphanumeric characters (except hyphens) with hyphens
+        name = re.sub(r"[^a-z0-9]+", "-", name)
+        # Remove leading/trailing hyphens that might result from multiple replacements
+        name = name.strip('-')
+        return name
+
+    formatted_name = format_commander_name(commander_name)
+    if not formatted_name:
+        print(f"Error: Could not format commander name: {commander_name}")
+        return {}
+
+    url = f"https://json.edhrec.com/pages/commanders/{formatted_name}.json"
+
+    try:
+        response = requests.get(url)
+        if response.status_code != 200:
+            print(f"Error fetching EDHREC data for {commander_name} (Formatted: {formatted_name}). Status: {response.status_code}, Response: {response.text[:200]}")
+            return {} # Or raise ValueError as per original spec, returning {} for now to avoid unhandled exceptions in caller
+    except requests.exceptions.RequestException as e:
+        print(f"Request failed for EDHREC data for {commander_name} (Formatted: {formatted_name}): {e}")
+        return {}
+
+    try:
+        json_response = response.json()
+    except ValueError as e: # Includes JSONDecodeError
+        print(f"Error parsing JSON response from EDHREC for {commander_name} (Formatted: {formatted_name}): {e}")
+        return {}
+
+    categorized_cards = {}
+    if 'container' in json_response and 'json_dict' in json_response['container'] and 'cardlists' in json_response['container']['json_dict']:
+        for section in json_response['container']['json_dict']['cardlists']:
+            label = section.get('tag', 'unlabeled')
+            # Ensure 'cardviews' exists and is a list before list comprehension
+            cardviews = section.get('cardviews', [])
+            if not isinstance(cardviews, list):
+                print(f"Warning: 'cardviews' for section '{label}' is not a list. Skipping.")
+                card_names = []
+            else:
+                card_names = [card.get('name') for card in cardviews if card.get('name')]
+
+            if card_names: # Only add section if there are card names
+                categorized_cards[label] = card_names
+    else:
+        print(f"Unexpected JSON structure from EDHREC for {commander_name} (Formatted: {formatted_name}). Response: {json_response}")
+        # Fallback: Try to get any cards if the structure is partially different
+        if 'cardlist' in json_response: # A common flat list structure in some EDHREC fallbacks
+             card_names = [card.get('name') for card in json_response['cardlist'] if card.get('name')]
+             if card_names:
+                 categorized_cards['general'] = card_names
+
+    return categorized_cards
+
+@app.route('/deck_suggestions', methods=['GET'])
+def deck_suggestions_route():
+    legendaries = get_legendary_creatures()
+
+    if not legendaries:
+        return render_template('suggestions.html', error_message="No legendary creatures found in your collection.")
+
+    all_user_cards_data = get_cards()
+    # Convert user card names to lowercase for case-insensitive comparison
+    user_card_names = {card['name'].lower() for card in all_user_cards_data if card.get('name')}
+
+    best_commander_info = None
+    max_matches = -1
+
+    for commander_data in legendaries:
+        commander_name = commander_data['name']
+        # Skip commanders with no name (should not happen with current DB schema but good practice)
+        if not commander_name:
+            continue
+
+        print(f"Fetching EDHREC suggestions for: {commander_name}") # Log which commander is being processed
+        edhrec_cards_by_category = fetch_all_edhrec_cards(commander_name)
+
+        if not edhrec_cards_by_category:
+            print(f"No EDHREC suggestions found for {commander_name} or error occurred.")
+            continue
+
+        all_edhrec_suggestions = set()
+        for category_cards in edhrec_cards_by_category.values():
+            for card_name in category_cards:
+                if isinstance(card_name, str): # Ensure card_name is a string
+                    all_edhrec_suggestions.add(card_name.lower())
+
+        if not all_edhrec_suggestions:
+            print(f"EDHREC suggestions were empty for {commander_name} after processing categories.")
+            continue
+
+        owned_suggestions = list(all_edhrec_suggestions.intersection(user_card_names))
+        current_match_count = len(owned_suggestions)
+
+        print(f"Commander: {commander_name}, Matches: {current_match_count}, Owned suggestions: {owned_suggestions[:5]}...") # Log matches
+
+        if current_match_count > max_matches:
+            max_matches = current_match_count
+            best_commander_info = {
+                'name': commander_name,
+                'suggestions': owned_suggestions,
+                'match_count': current_match_count,
+                'image_uri': commander_data.get('image_uri') # Pass image URI to template
+            }
+
+    if best_commander_info and best_commander_info['match_count'] > 0:
+        print(f"Best commander: {best_commander_info['name']} with {best_commander_info['match_count']} matches.")
+        return render_template('suggestions.html',
+                               commander_name=best_commander_info['name'],
+                               suggested_cards=best_commander_info['suggestions'],
+                               match_count=best_commander_info['match_count'],
+                               commander_image_uri=best_commander_info.get('image_uri'))
+    else:
+        print("Could not find a suitable commander or no matches found after checking all legendaries.")
+        return render_template('suggestions.html', message="Could not find a commander with significant matches in your collection based on EDHREC suggestions.")
 
 @app.route('/export/csv', methods=['GET'])
 def export_cards_csv():
