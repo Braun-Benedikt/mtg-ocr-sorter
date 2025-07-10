@@ -143,80 +143,119 @@ class TestOcrMvp(unittest.TestCase):
     @patch('recognition.ocr_mvp.extract_card_name')
     @patch('recognition.ocr_mvp.extract_card_name_area')
     @patch('recognition.ocr_mvp.load_image_cv2')
-    def test_process_image(self, mock_load_image, mock_extract_area, mock_extract_name, mock_fetch_info):
+    @patch('recognition.ocr_mvp.cv2.rotate') # Added mock for cv2.rotate
+    def test_process_image(self, mock_cv2_rotate, mock_load_image, mock_extract_area, mock_extract_name, mock_fetch_info): # Added mock_cv2_rotate to params
         dummy_path = "dummy/path/to/image.png"
         mock_corrector = MagicMock() # Dummy corrector for process_image
 
         # --- Test Case 1: Full successful processing ---
-        mock_load_image.return_value = MagicMock(name="cv2_image_mock") # Dummy image object
+        mock_loaded_image = MagicMock(name="cv2_image_mock")
+        mock_load_image.return_value = mock_loaded_image
+
+        mock_rotated_image = MagicMock(name="rotated_image_mock") # Mock for the rotated image
+        mock_cv2_rotate.return_value = mock_rotated_image # cv2.rotate will return this
+
         mock_extract_area.return_value = MagicMock(name="cropped_image_mock") # Dummy cropped image
         mock_extract_name.return_value = ("Raw OCR Text", "Corrected Card Name")
-        mock_fetch_info.return_value = ["1.99", "B"]
+        mock_fetch_info.return_value = {"price": "1.99", "color_identity": "B", "cmc": 1.0, "type_line": "Artifact", "image_uri": "uri"} # Match new return type
 
-        result = process_image(dummy_path, mock_corrector, show_gui=False)
+        # The function being tested is process_image_to_db, not process_image
+        # Need to adjust the import and call if the test is for process_image_to_db
+        # Assuming the test is for a function named 'process_image' as per the original test code
+        # If it's for process_image_to_db, the structure of the returned dict is different.
+        # For now, sticking to 'process_image' and its expected dict structure.
+        # Let's assume the function signature is process_image(image_path, corrector, show_gui)
+        # and it returns a dict like:
+        # {"image_path": ..., "ocr_name_raw": ..., "card_name": ..., "price": ..., "color_identity": ...}
+        #
+        # This test targets `process_image_to_db`.
+        from recognition.ocr_mvp import process_image_to_db # Import here to use the actual function
 
-        mock_load_image.assert_called_once_with(dummy_path)
-        mock_extract_area.assert_called_once_with(mock_load_image.return_value)
-        mock_extract_name.assert_called_once_with(mock_extract_area.return_value, mock_corrector)
-        mock_fetch_info.assert_called_once_with("Corrected Card Name")
+        # Mocking add_card which is called by process_image_to_db
+        with patch('recognition.ocr_mvp.add_card') as mock_add_card:
+            mock_add_card.return_value = 123 # Dummy card ID for the created card
+
+            result = process_image_to_db(dummy_path, mock_corrector, show_gui=False)
+
+            # Assertions for Case 1: Full successful processing
+            mock_load_image.assert_called_once_with(dummy_path)
+            mock_cv2_rotate.assert_called_once_with(mock_loaded_image, cv2.ROTATE_90_CLOCKWISE)
+            mock_extract_area.assert_called_once_with(mock_rotated_image)
+            mock_extract_name.assert_called_once_with(mock_extract_area.return_value, mock_corrector)
+            mock_fetch_info.assert_called_once_with("Corrected Card Name")
+            mock_add_card.assert_called_once_with(
+                name="Corrected Card Name",
+                ocr_name_raw="Raw OCR Text",
+                price="1.99",
+                color_identity="B",
+                image_path=dummy_path,
+                cmc=1.0,
+                type_line="Artifact",
+                image_uri="uri"
+            )
         
-        expected_result = {
-            "image_path": dummy_path,
-            "ocr_name_raw": "Raw OCR Text",
-            "card_name": "Corrected Card Name",
-            "price": "1.99",
-            "color_identity": "B"
-        }
-        self.assertEqual(result, expected_result)
+            expected_result = {
+                "id": 123,
+                "name": "Corrected Card Name",
+                "ocr_name_raw": "Raw OCR Text",
+                "price": "1.99",
+                "color_identity": "B",
+                "image_path": dummy_path,
+                "cmc": 1.0,
+                "type_line": "Artifact",
+                "image_uri": "uri"
+            }
+            self.assertEqual(result, expected_result)
 
         # Reset mocks for the next case
         mock_load_image.reset_mock()
+        mock_cv2_rotate.reset_mock()
         mock_extract_area.reset_mock()
         mock_extract_name.reset_mock()
         mock_fetch_info.reset_mock()
+        # mock_add_card is reset by exiting the 'with' block
 
         # --- Test Case 2: No corrected card name found (ocr_corrected is empty) ---
-        mock_load_image.return_value = MagicMock(name="cv2_image_mock_2")
+        # Re-setup mocks for this specific path
+        mock_loaded_image_case2 = MagicMock(name="cv2_image_mock_2")
+        mock_load_image.return_value = mock_loaded_image_case2
+
+        mock_rotated_image_case2 = MagicMock(name="rotated_image_mock_2")
+        mock_cv2_rotate.return_value = mock_rotated_image_case2
+
         mock_extract_area.return_value = MagicMock(name="cropped_image_mock_2")
         mock_extract_name.return_value = ("Raw OCR Text Only", "") # Empty corrected name
 
-        result_no_correction = process_image(dummy_path, mock_corrector, show_gui=False)
+        with patch('recognition.ocr_mvp.add_card') as mock_add_card_2:
+            result_no_correction = process_image_to_db(dummy_path, mock_corrector, show_gui=False)
 
-        mock_load_image.assert_called_once_with(dummy_path)
-        mock_extract_area.assert_called_once_with(mock_load_image.return_value)
-        mock_extract_name.assert_called_once_with(mock_extract_area.return_value, mock_corrector)
-        
-        mock_fetch_info.assert_not_called() # Crucial assertion
+            mock_load_image.assert_called_once_with(dummy_path)
+            mock_cv2_rotate.assert_called_once_with(mock_loaded_image_case2, cv2.ROTATE_90_CLOCKWISE)
+            mock_extract_area.assert_called_once_with(mock_rotated_image_case2)
+            mock_extract_name.assert_called_once_with(mock_extract_area.return_value, mock_corrector)
 
-        expected_result_no_correction = {
-            "image_path": dummy_path,
-            "ocr_name_raw": "Raw OCR Text Only",
-            "card_name": "",
-            "price": None,
-            "color_identity": None
-        }
-        self.assertEqual(result_no_correction, expected_result_no_correction)
+            mock_fetch_info.assert_not_called()
+            mock_add_card_2.assert_not_called() # add_card should not be called
 
-        # --- Test Case 3: load_image_cv2 fails ---
+        self.assertIsNone(result_no_correction) # process_image_to_db returns None if no corrected name
+
+        # Reset mocks for the next case
         mock_load_image.reset_mock()
+        mock_cv2_rotate.reset_mock()
         mock_extract_area.reset_mock()
         mock_extract_name.reset_mock()
         mock_fetch_info.reset_mock()
+
+        # --- Test Case 3: load_image_cv2 returns None (simulating load failure) ---
+        mock_load_image.return_value = None # Simulate load_image_cv2 returning None
         
-        mock_load_image.side_effect = ValueError("Failed to load image")
+        # No need to patch add_card here as it won't be reached
+        result_load_fail = process_image_to_db(dummy_path, mock_corrector, show_gui=False)
         
-        result_load_fail = process_image(dummy_path, mock_corrector, show_gui=False)
-        
-        expected_result_load_fail = {
-            "image_path": dummy_path,
-            "ocr_name_raw": None,
-            "card_name": None,
-            "price": None,
-            "color_identity": None,
-            "error": "Failed to load image"
-        }
-        self.assertEqual(result_load_fail, expected_result_load_fail)
+        self.assertIsNone(result_load_fail) # Expect None if image loading fails
+
         mock_load_image.assert_called_once_with(dummy_path)
+        mock_cv2_rotate.assert_not_called() # Rotate should not be called if load fails
         mock_extract_area.assert_not_called()
         mock_extract_name.assert_not_called()
         mock_fetch_info.assert_not_called()
