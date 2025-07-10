@@ -4,6 +4,7 @@ from flask import Flask, jsonify, request, send_file, render_template
 from werkzeug.utils import secure_filename
 import io
 import csv
+import atexit # For GPIO cleanup
 from pathlib import Path # Crucial import
 import subprocess # For libcamera-still check in if __name__ == '__main__'
 import requests # For fetching EDHREC data
@@ -42,6 +43,18 @@ try:
     from recognition.ocr_mvp import capture_images_from_camera, process_image_to_db, CardNameCorrector, setup_crop_interactively
     # Define DEFAULT_DICT_PATH using project_root_folder, AFTER project_root_folder is defined.
     DEFAULT_DICT_PATH = str(project_root_folder / "recognition" / "cards" / "card_names_symspell_clean.txt")
+
+    # GPIO Control imports
+    try:
+        from gpio_control import setup_gpio, cleanup_gpio, sort_card_left, sort_card_right, RASPBERRY_PI_ENVIRONMENT
+    except ImportError as e_gpio:
+        print(f"ERROR: Could not import from gpio_control: {e_gpio}")
+        # Define dummy GPIO functions if import fails
+        def setup_gpio(): print("DUMMY setup_gpio: gpio_control not found")
+        def cleanup_gpio(): print("DUMMY cleanup_gpio: gpio_control not found")
+        def sort_card_left(): print("DUMMY sort_card_left: gpio_control not found")
+        def sort_card_right(): print("DUMMY sort_card_right: gpio_control not found")
+        RASPBERRY_PI_ENVIRONMENT = False # Assume not on RPi if module is missing
 except ModuleNotFoundError as e:
     print(f"ERROR: Could not import from recognition.ocr_mvp: {e}")
     print(f"Project root: {project_root_folder}, sys.path: {sys.path}")
@@ -107,16 +120,48 @@ def scan_card():
     if image_path is None:
         return jsonify({"error": "Failed to capture image from camera"}), 500
     processed_card_data = process_image_to_db(image_path, card_corrector, show_gui=False)
+    sorting_direction = "none"
     if processed_card_data and processed_card_data.get("id"):
-        try: os.remove(image_path)
+        # Card recognized and saved
+        if RASPBERRY_PI_ENVIRONMENT:
+            print("APP: Card recognized, attempting to sort RIGHT.")
+            sort_card_right()
+            sorting_direction = "right"
+        else:
+            print("APP: Card recognized, (Mock GPIO) sort RIGHT.")
+            sort_card_right() # Call mock version
+            sorting_direction = "right (mock)"
+
+        try:
+            if os.path.exists(image_path): os.remove(image_path)
         except OSError as e: print(f"Error removing temporary image {image_path}: {e}")
-        return jsonify(processed_card_data), 201
-    elif processed_card_data:
-        return jsonify({"message": "Image processed, but no card identified or saved.", "details": processed_card_data}), 200
+
+        response_data = processed_card_data.copy()
+        response_data["sorted"] = sorting_direction
+        return jsonify(response_data), 201
     else:
-        try: os.remove(image_path)
+        # Card not recognized or not saved
+        if RASPBERRY_PI_ENVIRONMENT:
+            print("APP: Card NOT recognized, attempting to sort LEFT.")
+            sort_card_left()
+            sorting_direction = "left"
+        else:
+            print("APP: Card NOT recognized, (Mock GPIO) sort LEFT.")
+            sort_card_left() # Call mock version
+            sorting_direction = "left (mock)"
+
+        try:
+            if os.path.exists(image_path): os.remove(image_path)
         except OSError as e: print(f"Error removing temporary image {image_path} after failed processing: {e}")
-        return jsonify({"error": "Failed to process image or save card data"}), 500
+
+        if processed_card_data: # Image processed, but no card identified
+             # e.g. {'name': None, 'ocr_name_raw': ' Gibberish', ...}
+            response_data = {"message": "Image processed, but no card identified or saved.",
+                             "details": processed_card_data,
+                             "sorted": sorting_direction}
+            return jsonify(response_data), 200
+        else: # Failed to process image entirely
+            return jsonify({"error": "Failed to process image or save card data", "sorted": sorting_direction}), 500
 
 @app.route('/cards', methods=['GET'])
 def get_all_cards():
@@ -302,4 +347,12 @@ if __name__ == '__main__':
         print("libcamera-still found.")
     except Exception: # More general exception for CI environments
         print("WARNING: libcamera-still not found or not runnable. /scan endpoint will likely fail.")
+
+    # Setup GPIO before running the app
+    print("APP: Initializing GPIO...")
+    setup_gpio()
+    # Register GPIO cleanup function to be called on exit
+    atexit.register(cleanup_gpio)
+    print("APP: GPIO initialized and cleanup registered.")
+
     app.run(debug=True, host='0.0.0.0', port=5000)

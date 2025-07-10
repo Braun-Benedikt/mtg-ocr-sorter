@@ -163,10 +163,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 const result = await response.json();
 
                 if (response.ok) {
-                    scanStatusDiv.textContent = `Card '${result.name || 'Unknown'}' scanned successfully!`;
+                    let statusMessage = `Card '${result.name || 'Unknown'}' processed.`;
+                    if (result.id) { // Successfully identified and likely saved
+                        statusMessage = `Card '${result.name}' scanned successfully!`;
+                    } else if (result.message) { // Processed but not identified
+                        statusMessage = result.message;
+                    }
+                    if (result.sorted) {
+                        statusMessage += ` Sorted: ${result.sorted}.`;
+                    }
+                    scanStatusDiv.textContent = statusMessage;
                     fetchAndDisplayCards(); // Refresh the list
                 } else {
-                    throw new Error(result.error || `Scan failed with status: ${response.status}`);
+                    // Try to get error and sorted status from result if available
+                    let errorMessage = result.error || `Scan failed with status: ${response.status}`;
+                    if (result.sorted) {
+                        errorMessage += ` Sorting attempt: ${result.sorted}.`;
+                    }
+                    throw new Error(errorMessage);
                 }
             } catch (error) {
                 console.error('Error scanning card:', error);
