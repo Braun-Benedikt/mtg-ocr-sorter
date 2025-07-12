@@ -103,20 +103,50 @@ def configure_crop_route():
 def scan_card():
     if card_corrector is None:
         return jsonify({"error": "CardNameCorrector not initialized. Cannot process scan."}), 500
+    
     image_path = capture_images_from_camera()
     if image_path is None:
         return jsonify({"error": "Failed to capture image from camera"}), 500
+    
     processed_card_data = process_image_to_db(image_path, card_corrector, show_gui=False)
-    if processed_card_data and processed_card_data.get("id"):
-        try: os.remove(image_path)
-        except OSError as e: print(f"Error removing temporary image {image_path}: {e}")
-        return jsonify(processed_card_data), 201
-    elif processed_card_data:
-        return jsonify({"message": "Image processed, but no card identified or saved.", "details": processed_card_data}), 200
-    else:
-        try: os.remove(image_path)
-        except OSError as e: print(f"Error removing temporary image {image_path} after failed processing: {e}")
+    
+    # Always clean up the temporary image
+    try:
+        os.remove(image_path)
+    except OSError as e:
+        print(f"Error removing temporary image {image_path}: {e}")
+    
+    # Handle different response scenarios
+    if processed_card_data is None:
         return jsonify({"error": "Failed to process image or save card data"}), 500
+    
+    # Check if card was successfully recognized and saved to database
+    if processed_card_data.get("id"):
+        # Successful card recognition and database save
+        return jsonify(processed_card_data), 201
+    elif processed_card_data.get("error"):
+        # OCR performed but card recognition failed or other error occurred
+        # Still return the OCR results for debugging
+        return jsonify({
+            "message": "Image processed with issues",
+            "error": processed_card_data.get("error"),
+            "ocr_results": {
+                "raw_text": processed_card_data.get("ocr_name_raw", ""),
+                "corrected_name": processed_card_data.get("name", ""),
+                "price": processed_card_data.get("price"),
+                "color_identity": processed_card_data.get("color_identity"),
+                "cmc": processed_card_data.get("cmc"),
+                "type_line": processed_card_data.get("type_line", ""),
+                "image_uri": processed_card_data.get("image_uri", ""),
+                "debug_info": processed_card_data.get("debug_info", [])
+            }
+        }), 200
+    else:
+        # Unexpected response format
+        return jsonify({
+            "message": "Image processed with unexpected result",
+            "details": processed_card_data
+        }), 200
 
 @app.route('/cards', methods=['GET'])
 def get_all_cards():
@@ -279,6 +309,44 @@ def export_cards_csv():
     mem_csv = io.BytesIO(csv_buffer.getvalue().encode('utf-8'))
     csv_buffer.close()
     return send_file(mem_csv, as_attachment=True, download_name='scanned_cards.csv', mimetype='text/csv')
+
+@app.route('/save_unrecognized', methods=['POST'])
+def save_unrecognized_card():
+    """Save an unrecognized card to the database for debugging purposes"""
+    try:
+        data = request.get_json()
+        
+        # Extract data from request
+        ocr_raw = data.get('ocr_raw', '')
+        corrected_name = data.get('corrected_name', 'UNRECOGNIZED')
+        price = data.get('price')
+        color_identity = data.get('color_identity')
+        cmc = data.get('cmc', 0.0)
+        type_line = data.get('type_line', '')
+        image_uri = data.get('image_uri', '')
+        
+        # Save to database
+        card_id = add_card(
+            name=corrected_name,
+            ocr_name_raw=ocr_raw,
+            price=price,
+            color_identity=color_identity,
+            image_path="",  # No image path for manually saved cards
+            cmc=cmc,
+            type_line=type_line,
+            image_uri=image_uri
+        )
+        
+        return jsonify({
+            "message": "Unrecognized card saved successfully",
+            "id": card_id,
+            "name": corrected_name,
+            "ocr_name_raw": ocr_raw
+        }), 201
+        
+    except Exception as e:
+        print(f"Error saving unrecognized card: {e}")
+        return jsonify({"error": f"Failed to save unrecognized card: {str(e)}"}), 500
 
 @app.route('/cards/delete/<int:card_id>', methods=['DELETE'])
 def delete_card_route(card_id):

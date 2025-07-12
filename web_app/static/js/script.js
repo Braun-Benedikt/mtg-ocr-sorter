@@ -163,8 +163,93 @@ document.addEventListener('DOMContentLoaded', () => {
                 const result = await response.json();
 
                 if (response.ok) {
-                    scanStatusDiv.textContent = `Card '${result.name || 'Unknown'}' scanned successfully!`;
-                    fetchAndDisplayCards(); // Refresh the list
+                    if (result.id) {
+                        // Successful card recognition and save
+                        scanStatusDiv.textContent = `Card '${result.name || 'Unknown'}' scanned successfully!`;
+                        fetchAndDisplayCards(); // Refresh the list
+                    } else if (result.ocr_results) {
+                        // OCR performed but card recognition failed - show debugging info
+                        const ocrInfo = result.ocr_results;
+                        // Build debug info display
+                        let debugInfoHtml = '';
+                        if (ocrInfo.debug_info && ocrInfo.debug_info.length > 0) {
+                            debugInfoHtml = `<strong>Debug Info:</strong><br>`;
+                            ocrInfo.debug_info.forEach(info => {
+                                debugInfoHtml += `• ${info}<br>`;
+                            });
+                        }
+                        
+                        scanStatusDiv.innerHTML = `
+                            <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; margin: 10px 0; border-radius: 5px;">
+                                <strong>Card Recognition Failed</strong><br>
+                                <strong>Error:</strong> ${result.error}<br>
+                                <strong>Raw OCR Text:</strong> "${ocrInfo.raw_text || 'No text detected'}"<br>
+                                <strong>Corrected Name:</strong> "${ocrInfo.corrected_name || 'No correction possible'}"<br>
+                                <strong>Price:</strong> ${ocrInfo.price || 'N/A'}<br>
+                                <strong>Color Identity:</strong> ${ocrInfo.color_identity || 'N/A'}<br>
+                                <strong>CMC:</strong> ${ocrInfo.cmc || 'N/A'}<br>
+                                <strong>Type Line:</strong> ${ocrInfo.type_line || 'N/A'}<br>
+                                ${debugInfoHtml}
+                                <em>This information can help debug OCR issues. Try adjusting the crop area or improving lighting.</em>
+                                <br><br>
+                                <button id="saveUnrecognizedButton" style="background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">
+                                    Save as Unrecognized Card (Debug)
+                                </button>
+                            </div>
+                        `;
+                        
+                        // Add event listener for the save unrecognized button
+                        const saveUnrecognizedButton = document.getElementById('saveUnrecognizedButton');
+                        if (saveUnrecognizedButton) {
+                            saveUnrecognizedButton.addEventListener('click', async () => {
+                                saveUnrecognizedButton.disabled = true;
+                                saveUnrecognizedButton.textContent = 'Saving...';
+                                
+                                try {
+                                    const saveResponse = await fetch('/save_unrecognized', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                        },
+                                        body: JSON.stringify({
+                                            ocr_raw: ocrInfo.raw_text,
+                                            corrected_name: ocrInfo.corrected_name,
+                                            price: ocrInfo.price,
+                                            color_identity: ocrInfo.color_identity,
+                                            cmc: ocrInfo.cmc,
+                                            type_line: ocrInfo.type_line,
+                                            image_uri: ocrInfo.image_uri
+                                        })
+                                    });
+                                    
+                                    const saveResult = await saveResponse.json();
+                                    
+                                    if (saveResponse.ok) {
+                                        scanStatusDiv.innerHTML = `
+                                            <div style="background-color: #d4edda; border: 1px solid #c3e6cb; padding: 10px; margin: 10px 0; border-radius: 5px;">
+                                                <strong>Unrecognized Card Saved!</strong><br>
+                                                Card ID: ${saveResult.id}<br>
+                                                This will help with debugging OCR issues.
+                                            </div>
+                                        `;
+                                        fetchAndDisplayCards(); // Refresh the list
+                                    } else {
+                                        throw new Error(saveResult.error || 'Failed to save unrecognized card');
+                                    }
+                                } catch (error) {
+                                    console.error('Error saving unrecognized card:', error);
+                                    scanStatusDiv.innerHTML = `
+                                        <div style="background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; margin: 10px 0; border-radius: 5px;">
+                                            <strong>Error saving unrecognized card:</strong> ${error.message}
+                                        </div>
+                                    `;
+                                }
+                            });
+                        }
+                    } else {
+                        // Other successful response
+                        scanStatusDiv.textContent = result.message || 'Scan completed with unexpected result.';
+                    }
                 } else {
                     throw new Error(result.error || `Scan failed with status: ${response.status}`);
                 }

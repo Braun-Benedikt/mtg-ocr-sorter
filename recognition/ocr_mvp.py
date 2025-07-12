@@ -388,16 +388,87 @@ def process_image_to_db(image_path: str, corrector: CardNameCorrector, show_gui:
     image_cv = load_image_cv2(image_path)
     if image_cv is None:
         print(f"Error loading image {image_path}, cannot process.")
-        return None # Indicate failure
+        return {
+            "error": "Failed to load image",
+            "ocr_name_raw": "",
+            "name": "ERROR: Image load failed"
+        }
 
     cropped = extract_card_name_area(image_cv)
     ocr_raw, ocr_corrected = extract_card_name(cropped, corrector)
 
+    # Always return OCR results, even if card recognition fails
     if not ocr_corrected:
         print(f"No card name could be reliably extracted for {image_path}.")
-        # Optionally, still save with raw OCR if needed, or just return
-        # add_card(name="UNKNOWN", ocr_name_raw=ocr_raw, image_path=image_path)
-        return None # Indicate failure to identify a card
+        print(f"Raw OCR text: '{ocr_raw}'")
+        
+        # Provide detailed debugging information
+        debug_info = []
+        if not ocr_raw.strip():
+            debug_info.append("No text detected by OCR")
+        elif corrector and hasattr(corrector, 'valid_names'):
+            # Check if any OCR lines are close to valid names
+            best_matches = []
+            for lang, line in all_lines:
+                suggestions = corrector.symspell.lookup(line, Verbosity.ALL, max_edit_distance=3)
+                if suggestions:
+                    best_matches.extend([(s.term, s.distance, s.count) for s in suggestions[:3]])
+            
+            if best_matches:
+                debug_info.append(f"Best fuzzy matches: {best_matches[:5]}")
+            else:
+                debug_info.append("No fuzzy matches found in dictionary")
+        else:
+            debug_info.append("CardNameCorrector not properly initialized")
+        
+        print(f"Debug info: {'; '.join(debug_info)}")
+        
+        # Optionally save unrecognized cards to database for debugging
+        # This can be enabled by setting SAVE_UNRECOGNIZED_CARDS = True
+        SAVE_UNRECOGNIZED_CARDS = False  # Set to True to save unrecognized cards
+        
+        if SAVE_UNRECOGNIZED_CARDS:
+            try:
+                card_id = add_card(
+                    name="UNRECOGNIZED",
+                    ocr_name_raw=ocr_raw,
+                    price=None,
+                    color_identity=None,
+                    image_path=image_path,
+                    cmc=0.0,
+                    type_line="",
+                    image_uri=""
+                )
+                print(f"Unrecognized card saved to database with ID: {card_id}")
+                return {
+                    "id": card_id,
+                    "error": "Card recognition failed",
+                    "ocr_name_raw": ocr_raw,
+                    "name": "UNRECOGNIZED",
+                    "price": None,
+                    "color_identity": None,
+                    "cmc": 0.0,
+                    "type_line": "",
+                    "image_uri": "",
+                    "image_path": image_path,
+                    "debug_info": debug_info
+                }
+            except Exception as e:
+                print(f"Error saving unrecognized card to database: {e}")
+        
+        # Return OCR results for debugging, even without successful card recognition
+        return {
+            "error": "Card recognition failed",
+            "ocr_name_raw": ocr_raw,
+            "name": "UNRECOGNIZED",
+            "price": None,
+            "color_identity": None,
+            "cmc": None,
+            "type_line": "",
+            "image_uri": "",
+            "image_path": image_path,
+            "debug_info": debug_info
+        }
 
     print(f"Recognized: {ocr_corrected} (Raw: {ocr_raw}) from {image_path}")
 
@@ -437,7 +508,18 @@ def process_image_to_db(image_path: str, corrector: CardNameCorrector, show_gui:
         }
     except Exception as e:
         print(f"Error saving card '{ocr_corrected}' to database: {e}")
-        return None
+        # Return OCR results even if database save fails
+        return {
+            "error": f"Database save failed: {str(e)}",
+            "name": ocr_corrected,
+            "ocr_name_raw": ocr_raw,
+            "price": price,
+            "color_identity": color_identity,
+            "cmc": cmc,
+            "type_line": type_line,
+            "image_uri": image_uri,
+            "image_path": image_path
+        }
 
 
 # Main function for processing (e.g., from directory or single camera shot)
