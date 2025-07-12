@@ -15,6 +15,12 @@ This project aims to catalog and sort Magic: The Gathering (MTG) cards using ima
 *   **Database Storage (SQLite):**
     *   Stores cataloged card details in a local SQLite database (`web_app/magic_cards.db`).
     *   Key data points include: ID, recognized name, raw OCR text, price, color identity, image path (local), timestamp, CMC, type line, and Scryfall image URI.
+*   **Hardware Integration:**
+    *   **GPIO Control:** Complete hardware control system for physical card sorting machine using Raspberry Pi GPIO pins.
+    *   **Motor Control:** Controls conveyor belt motor for card transport.
+    *   **Sensor Integration:** Light barrier sensor for detecting card presence and timing.
+    *   **Sorting Mechanisms:** Dual sorting flaps and main sorting mechanism for directing cards to different output bins.
+    *   **Development Mode:** Mock GPIO interface for development and testing on non-Raspberry Pi systems.
 *   **Command-Line Interface (`main.py`):**
     *   Process card images in batches from a specified directory.
     *   Capture and process images directly from a connected camera.
@@ -35,6 +41,8 @@ This project aims to catalog and sort Magic: The Gathering (MTG) cards using ima
 ## 3. Project Structure
 
 *   `main.py`: Command-Line Interface (CLI) entry point.
+*   `gpio_control.py`: Hardware control module for physical card sorting machine, including motor control, sensor integration, and sorting mechanisms.
+*   `test_crop_setup.py`: Testing utility for verifying crop configuration functionality.
 *   `web_app/`: Contains the Flask web application.
     *   `app.py`: Main Flask application file, defines routes and web functionalities.
     *   `database.py`: Handles all SQLite database interactions (initialization, CRUD operations).
@@ -50,7 +58,7 @@ This project aims to catalog and sort Magic: The Gathering (MTG) cards using ima
     *   `symspell_dict_bereinigung.py`: Cleans and processes the dictionary file.
 *   `tests/`: Contains unit tests and test resources.
     *   `test_images/`: Sample images for testing.
-    *   Python test files (e.g., `test_ocr_mvp.py`, `test_web_app.py`).
+    *   Python test files (e.g., `test_ocr_mvp.py`, `test_web_app.py`, `test_camera_integration.py`).
 *   `requirements.txt`: Lists Python dependencies for the project.
 *   `README.md`: This file.
 
@@ -65,6 +73,10 @@ This project aims to catalog and sort Magic: The Gathering (MTG) cards using ima
 *   **`libcamera-utils` (for Raspberry Pi Camera Users):**
     *   If using the camera feature on a Raspberry Pi with a libcamera-based camera module, `libcamera-utils` (which includes `libcamera-still`) must be installed.
     *   Typically installed via: `sudo apt update && sudo apt install libcamera-utils`
+*   **RPi.GPIO (for Hardware Control):**
+    *   Required for GPIO control on Raspberry Pi systems.
+    *   Automatically installed via `requirements.txt` on Raspberry Pi.
+    *   Mock interface available for development on non-Raspberry Pi systems.
 
 ## 5. Installation
 
@@ -205,7 +217,31 @@ The web application provides a richer, interactive experience for managing your 
 *   **Content:** Stores details for each cataloged card, including name, OCR data, price, color identity, image URI, etc.
 *   **Export:** The entire database can be exported to a CSV file via the web interface.
 
-## 9. Tools
+## 9. Hardware Integration
+
+The project includes a complete hardware control system for physical card sorting machines using Raspberry Pi GPIO pins.
+
+*   **GPIO Pin Configuration:**
+    *   **Motor Control (Pin 23):** Controls the conveyor belt motor for card transport.
+    *   **Light Barrier Sensor (Pin 24):** Detects card presence and timing for sorting operations.
+    *   **Left Sorting Flap (Pins 14 & 15):** Dual-pin control for left sorting mechanism (pins must maintain same state).
+    *   **Main Sorting Mechanism (Pin 18):** Controls the main sorting mechanism for right sorting or delayed left sorting.
+*   **Sorting Operations:**
+    *   **Right Sorting:** Activates motor, waits for card detection, triggers main sorting mechanism, then activates left flap for timing control.
+    *   **Left Sorting:** Similar sequence but with different timing and mechanism activation.
+    *   **Development Mode:** Mock GPIO interface allows development and testing on non-Raspberry Pi systems.
+*   **Hardware Requirements:**
+    *   Raspberry Pi with GPIO access
+    *   Relay modules for motor and sorting mechanism control
+    *   Light barrier sensor for card detection
+    *   Conveyor belt system
+    *   Sorting flaps and mechanisms
+*   **Safety Features:**
+    *   Automatic GPIO cleanup on program termination
+    *   Mock interface prevents hardware damage during development
+    *   Proper initialization and state management for all GPIO pins
+
+## 10. Tools
 
 The `tools/` directory contains scripts essential for the application's accuracy:
 
@@ -217,14 +253,14 @@ The `tools/` directory contains scripts essential for the application's accuracy
     *   It cleans the names (e.g., removing special characters or formatting unsuitable for SymSpell) and prepares the final dictionary (`recognition/cards/card_names_symspell_clean.txt`).
 *   **Importance:** Running these tools in sequence is crucial for the `CardNameCorrector` to function effectively and provide accurate fuzzy matching for OCR'd card names.
 
-## 10. Testing
+## 11. Testing
 
 *   The `tests/` directory contains various Python scripts for unit and integration testing.
     *   Examples include `test_ocr_mvp.py`, `test_fuzzy_match.py`, `test_web_app.py`, and `test_camera_integration.py`.
 *   `tests/test_images/` provides a small set of sample card images that can be used with `main.py` (it's the default image directory).
 *   To run tests, you would typically use a test runner like `pytest` (not explicitly configured in the project yet, but tests are structured to be compatible). For now, some tests might be runnable directly or via their `if __name__ == "__main__":` blocks.
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 *   **"libcamera-still not found" or Camera Issues (Raspberry Pi):**
     *   Ensure `libcamera-utils` is installed: `sudo apt install libcamera-utils`.
@@ -245,11 +281,18 @@ The `tools/` directory contains scripts essential for the application's accuracy
     *   Ensure the Flask server (`python web_app/app.py`) is running without errors in the console.
     *   Check for any error messages in the server console output.
     *   Verify all dependencies in `requirements.txt` are installed in your active Python environment.
+*   **Hardware/GPIO Issues:**
+    *   **Mock GPIO Mode:** If you see "MockGPIO: Initialized" messages, the system is running in development mode without actual hardware.
+    *   **RPi.GPIO Import Errors:** Ensure RPi.GPIO is installed (`pip install RPi.GPIO`) on Raspberry Pi systems.
+    *   **GPIO Permission Issues:** On Raspberry Pi, ensure your user has GPIO access or run with appropriate permissions.
+    *   **Hardware Not Responding:** Check physical connections, relay module power, and GPIO pin assignments in `gpio_control.py`.
 
-## 12. Future Goals / Roadmap
+## 13. Future Goals / Roadmap
 
-*   Full integration with a Raspberry Pi and a physical card sorting machine, including hardware control components.
-*   Comprehensive unit and integration testing suite with automated runs.
-*   Ongoing improvements to error handling, logging capabilities, and overall configuration flexibility.
-*   Enhanced card data model (e.g., storing MTG set information, foil status, card language).
-*   Improved UI/UX for the web application.
+*   **Hardware Integration:** ✅ **COMPLETED** - Full integration with Raspberry Pi and physical card sorting machine, including GPIO control components.
+*   **Enhanced Testing:** Comprehensive unit and integration testing suite with automated runs.
+*   **System Improvements:** Ongoing improvements to error handling, logging capabilities, and overall configuration flexibility.
+*   **Data Model Enhancement:** Enhanced card data model (e.g., storing MTG set information, foil status, card language).
+*   **UI/UX Improvements:** Enhanced user interface and experience for the web application.
+*   **Performance Optimization:** Optimize OCR accuracy and processing speed for real-time card sorting.
+*   **Advanced Sorting Logic:** Implement more sophisticated sorting algorithms based on card value, rarity, or user-defined criteria.
