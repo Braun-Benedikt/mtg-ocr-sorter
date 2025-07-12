@@ -55,7 +55,7 @@ if platform.system() == "Windows":
         print(f"INFO: Tesseract executable not found at {tesseract_path}. Assuming it's in PATH.")
 
 # Default paths (dictionary_path might be passed by main.py)
-dictionary_path_default = project_root / "recognition" / "cards" / "card_names_symspell_clean.txt"
+dictionary_path_default = project_root / "recognition" / "cards" / "card_names_multilingual_symspell_clean.txt"
 
 
 def setup_crop_interactively():
@@ -210,17 +210,54 @@ def extract_card_name_area(image: np.ndarray,
     return cropped_img
 
 
-def extract_card_name(image: np.ndarray, corrector) -> tuple[str, str]:
+def extract_card_name(image: np.ndarray, corrector, language="eng") -> tuple[str, str]:
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    ocr_raw = pytesseract.image_to_string(gray, lang="eng")
-    lines = [line.strip() for line in ocr_raw.split("\n") if line.strip()]
-    if not lines: return "", ""
-
+    
+    # Try multiple language configurations for better recognition
+    ocr_results = []
+    
+    # Try English first
+    try:
+        ocr_eng = pytesseract.image_to_string(gray, lang="eng")
+        ocr_results.append(("eng", ocr_eng))
+    except Exception as e:
+        print(f"Warning: English OCR failed: {e}")
+    
+    # Try German if specified or if English failed
+    if language == "deu" or not ocr_results:
+        try:
+            ocr_deu = pytesseract.image_to_string(gray, lang="deu")
+            ocr_results.append(("deu", ocr_deu))
+        except Exception as e:
+            print(f"Warning: German OCR failed: {e}")
+    
+    # Try combined English+German if both are available
+    if len(ocr_results) >= 2:
+        try:
+            ocr_combined = pytesseract.image_to_string(gray, lang="eng+deu")
+            ocr_results.append(("eng+deu", ocr_combined))
+        except Exception as e:
+            print(f"Warning: Combined OCR failed: {e}")
+    
+    # If no OCR results, return empty
+    if not ocr_results:
+        return "", ""
+    
+    # Process all OCR results
+    all_lines = []
+    for lang, ocr_text in ocr_results:
+        lines = [line.strip() for line in ocr_text.split("\n") if line.strip()]
+        all_lines.extend([(lang, line) for line in lines])
+    
+    if not all_lines:
+        return "", ""
+    
     best_term = ""
+    best_score = -1
+    
     # Check if corrector and its symspell attribute are properly initialized
     if corrector and hasattr(corrector, 'symspell') and hasattr(corrector.symspell, 'lookup') and hasattr(corrector, 'valid_names'):
-        best_score = -1
-        for line in lines:
+        for lang, line in all_lines:
             suggestions = corrector.symspell.lookup(line, Verbosity.TOP, max_edit_distance=2)
             for suggestion in suggestions:
                 if suggestion.term in corrector.valid_names and suggestion.count > best_score:
@@ -229,10 +266,11 @@ def extract_card_name(image: np.ndarray, corrector) -> tuple[str, str]:
     else:
         print("Warning: CardNameCorrector not fully initialized. Skipping fuzzy matching.")
         # Fallback: use the longest line from OCR if no correction is possible
-        if lines: best_term = max(lines, key=len)
-
-
-    return ocr_raw.strip(), best_term
+        if all_lines:
+            best_term = max(all_lines, key=lambda x: len(x[1]))[1]
+    
+    # Return the first OCR result as raw text, and the best corrected term
+    return ocr_results[0][1].strip(), best_term
 
 
 def load_image_cv2(path: str) -> np.ndarray | None:
@@ -255,21 +293,62 @@ def cv2_to_tk(image: np.ndarray):
 
 def fetch_card_information(card_name):
     if not card_name: return None
+    
+    # Try to fetch card information using the exact name first
+    card_info = _fetch_card_by_name(card_name)
+    if card_info:
+        return card_info
+    
+    # If that fails, try to find the card by searching for it
+    # This is useful for German cards where we might need to find the English equivalent
+    card_info = _search_card_by_name(card_name)
+    if card_info:
+        return card_info
+    
+    return None
+
+def _fetch_card_by_name(card_name):
+    """Fetch card information by exact name"""
     url = f"https://api.scryfall.com/cards/named?exact={card_name}"
     try:
-        response = requests.get(url, timeout=10) # Added timeout
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
-        price = data.get('prices', {}).get('eur') or data.get('prices', {}).get('usd')
-        color_id_list = data.get('color_identity', [])
-        color_id = "".join(color_id_list) if color_id_list else "C" # Default to 'C' if empty
-        cmc = data.get('cmc', 0.0)
-        type_line = data.get('type_line', '')
-        image_uri = data.get('image_uris', {}).get('normal', '')
-        return {"price": price, "color_identity": color_id, "cmc": cmc, "type_line": type_line, "image_uri": image_uri}
-    except requests.RequestException as e: # More specific exception handling
+        return _extract_card_data(data)
+    except requests.RequestException as e:
         print(f"⚠️ API Error for {card_name}: {e}")
         return None
+
+def _search_card_by_name(card_name):
+    """Search for card by name (fuzzy search)"""
+    url = f"https://api.scryfall.com/cards/search"
+    params = {"q": f'!"{card_name}"', "unique": "cards"}
+    
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get('data') and len(data['data']) > 0:
+            # Return the first (most relevant) result
+            return _extract_card_data(data['data'][0])
+        else:
+            print(f"⚠️ No card found for: {card_name}")
+            return None
+            
+    except requests.RequestException as e:
+        print(f"⚠️ Search API Error for {card_name}: {e}")
+        return None
+
+def _extract_card_data(data):
+    """Extract card data from Scryfall API response"""
+    price = data.get('prices', {}).get('eur') or data.get('prices', {}).get('usd')
+    color_id_list = data.get('color_identity', [])
+    color_id = "".join(color_id_list) if color_id_list else "C"
+    cmc = data.get('cmc', 0.0)
+    type_line = data.get('type_line', '')
+    image_uri = data.get('image_uris', {}).get('normal', '')
+    return {"price": price, "color_identity": color_id, "cmc": cmc, "type_line": type_line, "image_uri": image_uri}
 
 
 def show_image_gui(original, cropped, ocr_raw, ocr_corrected):

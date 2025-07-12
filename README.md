@@ -9,6 +9,7 @@ This project aims to catalog and sort Magic: The Gathering (MTG) cards using ima
     *   **Image Capture:** Supports image input from files or direct capture using `libcamera-still` on compatible systems (e.g., Raspberry Pi).
     *   **OCR Technology:** Utilizes Tesseract OCR to extract text from card images, focusing on the card name area.
     *   **Fuzzy Name Correction:** Implements SymSpell for robust fuzzy matching, correcting common OCR errors against a comprehensive MTG card name dictionary.
+*   **Multilingual Support:** Supports both English and German card recognition with automatic language detection and OCR optimization.
     *   **Interactive Crop Configuration:** A tool to visually define the card name area on an image, optimizing recognition accuracy. Accessible via CLI and Web UI.
 *   **Data Enrichment (Scryfall API):**
     *   Automatically fetches detailed card information for recognized cards, including current market price (EUR/USD), color identity, Converted Mana Cost (CMC), full type line, and card image URI from the Scryfall API.
@@ -46,8 +47,11 @@ This project aims to catalog and sort Magic: The Gathering (MTG) cards using ima
     *   `fuzzy_match.py`: Implements the `CardNameCorrector` class using SymSpell for name correction.
     *   `cards/`: Stores dictionary files for SymSpell (e.g., `card_names_symspell_clean.txt`).
 *   `tools/`: Utility scripts.
-    *   `build_symspell_dictionary.py`: Fetches card names from Scryfall to create the initial dictionary.
-    *   `symspell_dict_bereinigung.py`: Cleans and processes the dictionary file.
+    *   `build_symspell_dictionary.py`: Fetches English card names from Scryfall to create the initial dictionary.
+    *   `build_german_dictionary.py`: Fetches German card names from Scryfall and creates multilingual dictionaries.
+    *   `symspell_dict_bereinigung.py`: Cleans and processes the English dictionary file.
+    *   `symspell_dict_german_bereinigung.py`: Cleans and processes the German dictionary file.
+    *   `symspell_dict_multilingual_bereinigung.py`: Cleans and processes the multilingual dictionary file.
 *   `tests/`: Contains unit tests and test resources.
     *   `test_images/`: Sample images for testing.
     *   Python test files (e.g., `test_ocr_mvp.py`, `test_web_app.py`).
@@ -62,6 +66,7 @@ This project aims to catalog and sort Magic: The Gathering (MTG) cards using ima
     *   Must be installed and accessible in your system's PATH.
     *   Installation instructions: [Tesseract OCR Documentation](https://tesseract-ocr.github.io/tessdoc/Installation.html)
     *   Ensure the `tesseract` command is available. `pytesseract` (used by this project) relies on it.
+    *   **For German card support:** Install German language pack. On Ubuntu/Debian: `sudo apt install tesseract-ocr-deu`. On Windows, download German language data from the Tesseract GitHub repository.
 *   **`libcamera-utils` (for Raspberry Pi Camera Users):**
     *   If using the camera feature on a Raspberry Pi with a libcamera-based camera module, `libcamera-utils` (which includes `libcamera-still`) must be installed.
     *   Typically installed via: `sudo apt update && sudo apt install libcamera-utils`
@@ -86,6 +91,8 @@ This project aims to catalog and sort Magic: The Gathering (MTG) cards using ima
     Ensure Tesseract is installed and correctly configured as per the Prerequisites section.
 5.  **Set Up the Card Name Dictionary:**
     The dictionary is crucial for accurate card name correction. Generate it by running the following scripts from the project's root directory:
+    
+    **Option A: English-only dictionary (original):**
     *   **Step 1: Build initial dictionary from Scryfall:**
         ```bash
         python tools/build_symspell_dictionary.py
@@ -95,8 +102,21 @@ This project aims to catalog and sort Magic: The Gathering (MTG) cards using ima
         ```bash
         python tools/symspell_dict_bereinigung.py
         ```
-        This creates the final `recognition/cards/card_names_symspell_clean.txt`, which is used by the application.
-    *   **Verification:** Ensure `recognition/cards/card_names_symspell_clean.txt` has been successfully created.
+        This creates the final `recognition/cards/card_names_symspell_clean.txt`.
+    
+    **Option B: Multilingual dictionary (recommended for German cards):**
+    *   **Step 1: Build multilingual dictionary from Scryfall:**
+        ```bash
+        python tools/build_german_dictionary.py
+        ```
+        This creates multiple dictionary files including `recognition/cards/card_names_multilingual_symspell.txt`.
+    *   **Step 2: Clean and process the multilingual dictionary:**
+        ```bash
+        python tools/symspell_dict_multilingual_bereinigung.py
+        ```
+        This creates the final `recognition/cards/card_names_multilingual_symspell_clean.txt`, which is used by default.
+    
+    *   **Verification:** Ensure the desired dictionary file has been successfully created.
 
 ## 6. Configuration
 
@@ -108,8 +128,16 @@ This project aims to catalog and sort Magic: The Gathering (MTG) cards using ima
     *   **How it Works:** The selection updates internal ratio constants within `recognition/ocr_mvp.py`, which are then used for all subsequent image cropping. These settings persist as long as the application is running or until reconfigured.
 *   **Tesseract Path (Optional Manual Override):**
     *   If Tesseract is installed but not in your system's PATH, you can manually set the path to the Tesseract executable within `recognition/ocr_mvp.py`. Look for the `pytesseract.pytesseract.tesseract_cmd` line. This is primarily relevant for Windows users who install Tesseract to a custom location.
+*   **Language Support:**
+    *   The system automatically detects and processes both English and German card names.
+    *   OCR is optimized for both languages using Tesseract's multilingual capabilities.
+    *   German umlauts (ä, ö, ü, ß) are properly handled in the fuzzy matching system.
 *   **Dictionary Path (CLI Only):**
-    *   The `main.py` script accepts a `-d` or `--dict_path` argument to specify a custom location for the SymSpell dictionary file. The web application uses a default path (`recognition/cards/card_names_symspell_clean.txt`).
+    *   The `main.py` script accepts a `-d` or `--dict_path` argument to specify a custom location for the SymSpell dictionary file. The web application uses a default path (`recognition/cards/card_names_multilingual_symspell_clean.txt`).
+*   **Language Support:**
+    *   The system automatically detects and processes both English and German card names.
+    *   OCR is optimized for both languages using Tesseract's multilingual capabilities.
+    *   German umlauts (ä, ö, ü, ß) are properly handled in the fuzzy matching system.
 
 ## 7. Usage
 
@@ -210,12 +238,22 @@ The web application provides a richer, interactive experience for managing your 
 The `tools/` directory contains scripts essential for the application's accuracy:
 
 *   `tools/build_symspell_dictionary.py`:
-    *   This script fetches a list of all MTG card names from the Scryfall API.
+    *   This script fetches a list of all English MTG card names from the Scryfall API.
     *   It creates an initial, raw dictionary file (`recognition/cards/card_names_symspell.txt`).
+*   `tools/build_german_dictionary.py`:
+    *   This script fetches both English and German MTG card names from the Scryfall API.
+    *   It creates multiple dictionary files including a multilingual dictionary (`recognition/cards/card_names_multilingual_symspell.txt`).
+    *   **Recommended for users with German cards.**
 *   `tools/symspell_dict_bereinigung.py`:
-    *   This script processes the raw dictionary generated by `build_symspell_dictionary.py`.
+    *   This script processes the raw English dictionary generated by `build_symspell_dictionary.py`.
     *   It cleans the names (e.g., removing special characters or formatting unsuitable for SymSpell) and prepares the final dictionary (`recognition/cards/card_names_symspell_clean.txt`).
-*   **Importance:** Running these tools in sequence is crucial for the `CardNameCorrector` to function effectively and provide accurate fuzzy matching for OCR'd card names.
+*   `tools/symspell_dict_german_bereinigung.py`:
+    *   This script processes the raw German dictionary generated by `build_german_dictionary.py`.
+    *   It cleans German card names while preserving umlauts and special German characters.
+*   `tools/symspell_dict_multilingual_bereinigung.py`:
+    *   This script processes the raw multilingual dictionary generated by `build_german_dictionary.py`.
+    *   It creates the final multilingual dictionary (`recognition/cards/card_names_multilingual_symspell_clean.txt`) used by default.
+*   **Importance:** Running these tools in sequence is crucial for the `CardNameCorrector` to function effectively and provide accurate fuzzy matching for OCR'd card names in both English and German.
 
 ## 10. Testing
 
@@ -241,6 +279,10 @@ The `tools/` directory contains scripts essential for the application's accuracy
     *   **Use the Crop Configuration Tool:** This is the most important step. Access it via `python main.py --configure_crop` or the "Configure Crop Area" button in the web app. Accurately selecting the name region significantly improves OCR.
     *   **Lighting and Focus:** Ensure good, even lighting on the card and that the camera is focused correctly. Shadows and glare can severely impact OCR.
     *   **Card Condition:** Very worn or damaged cards might be harder to recognize.
+*   **German Card Recognition Issues:**
+    *   **Ensure German Language Support:** Make sure you've built the multilingual dictionary using `python tools/build_german_dictionary.py` and `python tools/symspell_dict_multilingual_bereinigung.py`.
+    *   **Tesseract German Language Pack:** Ensure Tesseract has German language data installed. On Ubuntu/Debian: `sudo apt install tesseract-ocr-deu`.
+    *   **Umlaut Recognition:** German umlauts (ä, ö, ü, ß) are supported, but poor image quality can affect their recognition.
 *   **Web App Issues (e.g., 404 errors, features not working):**
     *   Ensure the Flask server (`python web_app/app.py`) is running without errors in the console.
     *   Check for any error messages in the server console output.
