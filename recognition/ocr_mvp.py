@@ -322,6 +322,9 @@ def process_image_to_db(image_path: str, corrector: CardNameCorrector, show_gui:
     cropped = extract_card_name_area(image_cv)
     ocr_raw, ocr_corrected = extract_card_name(cropped, corrector)
 
+    # Always print the OCR string for debugging purposes
+    print(f"DEBUG: OCR Raw String: '{ocr_raw}' | Corrected: '{ocr_corrected}'")
+
     if not ocr_corrected:
         print(f"No card name could be reliably extracted for {image_path}.")
         # Optionally, still save with raw OCR if needed, or just return

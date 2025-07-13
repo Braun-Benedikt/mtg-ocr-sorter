@@ -220,16 +220,16 @@ def sort_card_right():
         time.sleep(0.01)
     print(f"GPIO_CONTROL: Sensor ({SENSOR_PIN}) is HIGH again.")
 
-    # GPIO 15 und 18 für 12 ms einschalten (braking)
-    print(f"GPIO_CONTROL: Activating sorting motor ({SORT_MOTOR_PIN}) and right direction ({SORT_DIR_RIGHT_PIN}) for 12ms braking (Pins HIGH)")
+    # GPIO 15 und 19 für 12 ms einschalten (braking with opposite direction)
+    print(f"GPIO_CONTROL: Activating sorting motor ({SORT_MOTOR_PIN}) and opposite direction for 12ms braking (Pins HIGH)")
     GPIO.output(SORT_MOTOR_PIN, GPIO.HIGH)
-    GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.HIGH)
+    GPIO.output(SORT_DIR_LEFT_PIN, GPIO.HIGH)  # Use opposite direction for braking
     time.sleep(0.012) # 12 ms
 
-    # Danach GPIO 15 und 18 ausschalten (Sorting Motor OFF = LOW)
+    # Danach GPIO 15 und 19 ausschalten (Sorting Motor OFF = LOW)
     GPIO.output(SORT_MOTOR_PIN, GPIO.LOW)
-    GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.LOW)
-    print(f"GPIO_CONTROL: Sorting motor ({SORT_MOTOR_PIN}) and right direction ({SORT_DIR_RIGHT_PIN}) OFF (Pins LOW)")
+    GPIO.output(SORT_DIR_LEFT_PIN, GPIO.LOW)  # Turn off the braking direction
+    print(f"GPIO_CONTROL: Sorting motor ({SORT_MOTOR_PIN}) and braking direction ({SORT_DIR_LEFT_PIN}) OFF (Pins LOW)")
 
     # Nach 600 ms GPIO 14 und 16 ausschalten (Conveyor Motor OFF = LOW)
     time.sleep(0.6) # 600 ms
@@ -292,16 +292,16 @@ def sort_card_left():
         time.sleep(0.01)
     print(f"GPIO_CONTROL: Sensor ({SENSOR_PIN}) is HIGH again.")
 
-    # GPIO 15 und 19 für 12 ms einschalten (braking)
-    print(f"GPIO_CONTROL: Activating sorting motor ({SORT_MOTOR_PIN}) and left direction ({SORT_DIR_LEFT_PIN}) for 12ms braking (Pins HIGH)")
+    # GPIO 15 und 18 für 12 ms einschalten (braking with opposite direction)
+    print(f"GPIO_CONTROL: Activating sorting motor ({SORT_MOTOR_PIN}) and opposite direction for 12ms braking (Pins HIGH)")
     GPIO.output(SORT_MOTOR_PIN, GPIO.HIGH)
-    GPIO.output(SORT_DIR_LEFT_PIN, GPIO.HIGH)
+    GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.HIGH)  # Use opposite direction for braking
     time.sleep(0.012) # 12 ms
 
-    # Danach GPIO 15 und 19 ausschalten (Sorting Motor OFF = LOW)
+    # Danach GPIO 15 und 18 ausschalten (Sorting Motor OFF = LOW)
     GPIO.output(SORT_MOTOR_PIN, GPIO.LOW)
-    GPIO.output(SORT_DIR_LEFT_PIN, GPIO.LOW)
-    print(f"GPIO_CONTROL: Sorting motor ({SORT_MOTOR_PIN}) and left direction ({SORT_DIR_LEFT_PIN}) OFF (Pins LOW)")
+    GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.LOW)  # Turn off the braking direction
+    print(f"GPIO_CONTROL: Sorting motor ({SORT_MOTOR_PIN}) and braking direction ({SORT_DIR_RIGHT_PIN}) OFF (Pins LOW)")
 
     # Nach 600 ms GPIO 14 und 16 ausschalten (Conveyor Motor OFF = LOW)
     time.sleep(0.6) # 600 ms
