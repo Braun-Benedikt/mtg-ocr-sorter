@@ -12,8 +12,8 @@ except ImportError:
         BCM = "BCM_MODE"
         OUT = "OUTPUT_MODE"
         IN = "INPUT_MODE"
-        HIGH = 1 # Represents relay OFF for active-LOW relays
-        LOW = 0  # Represents relay ON for active-LOW relays
+        HIGH = 1 # Represents relay ON for active-HIGH relays
+        LOW = 0  # Represents relay OFF for active-HIGH relays
         PUD_DOWN = "PULL_DOWN_RESISTOR"
         PUD_UP = "PULL_UP_RESISTOR"
 
@@ -22,7 +22,7 @@ except ImportError:
             self._pin_modes = {}
             self._warnings = True
             self._mode = None
-            print("MockGPIO: Initialized (Active-LOW relay logic assumed for outputs)")
+            print("MockGPIO: Initialized (Active-HIGH relay logic assumed for outputs)")
 
         def setmode(self, mode):
             self._mode = mode
@@ -34,19 +34,19 @@ except ImportError:
         def setup(self, channel, mode, initial=None, pull_up_down=None):
             self._pin_modes[channel] = {'mode': mode, 'pull_up_down': pull_up_down}
             if mode == self.OUT:
-                # For active-LOW relays, initial=HIGH means OFF, initial=LOW means ON.
+                # For active-HIGH relays, initial=HIGH means ON, initial=LOW means OFF.
                 # The 'initial' parameter directly reflects the pin level.
-                self._pin_states[channel] = initial if initial is not None else self.HIGH # Default to OFF (HIGH)
+                self._pin_states[channel] = initial if initial is not None else self.LOW # Default to OFF (LOW)
             elif mode == self.IN:
                 self._pin_states[channel] = self.LOW if pull_up_down == self.PUD_DOWN else self.HIGH
-            print(f"MockGPIO: Pin {channel} setup as {mode}. Initial pin level: {self._pin_states[channel]}. PullUpDown: {pull_up_down}. Relay state: {'OFF' if self._pin_states[channel] == self.HIGH else 'ON' if mode == self.OUT else 'N/A'}")
+            print(f"MockGPIO: Pin {channel} setup as {mode}. Initial pin level: {self._pin_states[channel]}. PullUpDown: {pull_up_down}. Relay state: {'ON' if self._pin_states[channel] == self.HIGH else 'OFF' if mode == self.OUT else 'N/A'}")
 
         def output(self, channel, value): # value is GPIO.LOW or GPIO.HIGH
             if channel not in self._pin_modes or self._pin_modes[channel]['mode'] != self.OUT:
                 print(f"MockGPIO: Error - Pin {channel} not setup as OUTPUT.")
                 return
             self._pin_states[channel] = value
-            relay_state = "ON" if value == self.LOW else "OFF"
+            relay_state = "ON" if value == self.HIGH else "OFF"
             print(f"MockGPIO: Pin {channel} set to level {value} (Relay {relay_state}).")
 
 
@@ -139,25 +139,25 @@ def setup_gpio():
         GPIO.setmode(GPIO.BCM)
 
 
-    # Setup output pins - For active-LOW relays, initial=HIGH means relay is OFF.
-    GPIO.setup(MOTOR_PIN_1, GPIO.OUT, initial=GPIO.HIGH)
-    GPIO.setup(MOTOR_PIN_2, GPIO.OUT, initial=GPIO.HIGH)
-    GPIO.setup(SORT_MOTOR_PIN, GPIO.OUT, initial=GPIO.HIGH)
-    GPIO.setup(SORT_DIR_LEFT_PIN, GPIO.OUT, initial=GPIO.HIGH)
-    GPIO.setup(SORT_DIR_RIGHT_PIN, GPIO.OUT, initial=GPIO.HIGH)
+    # Setup output pins - For active-HIGH relays, initial=LOW means relay is OFF.
+    GPIO.setup(MOTOR_PIN_1, GPIO.OUT, initial=GPIO.LOW)
+    GPIO.setup(MOTOR_PIN_2, GPIO.OUT, initial=GPIO.LOW)
+    GPIO.setup(SORT_MOTOR_PIN, GPIO.OUT, initial=GPIO.LOW)
+    GPIO.setup(SORT_DIR_LEFT_PIN, GPIO.OUT, initial=GPIO.LOW)
+    GPIO.setup(SORT_DIR_RIGHT_PIN, GPIO.OUT, initial=GPIO.LOW)
 
     # Setup input pin for light barrier (logic remains unchanged for sensor)
     # Assuming active HIGH sensor: HIGH when beam is broken, LOW when clear.
     # Use pull-down resistor so it reads LOW when beam is not broken (clear path).
     GPIO.setup(SENSOR_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 
-    print(f"GPIO_CONTROL: Pin {MOTOR_PIN_1} (Motor Pin 1) setup as OUT, initial HIGH (Relay OFF).")
-    print(f"GPIO_CONTROL: Pin {MOTOR_PIN_2} (Motor Pin 2) setup as OUT, initial HIGH (Relay OFF).")
-    print(f"GPIO_CONTROL: Pin {SORT_MOTOR_PIN} (Sorting Motor) setup as OUT, initial HIGH (Relay OFF).")
-    print(f"GPIO_CONTROL: Pin {SORT_DIR_LEFT_PIN} (Sorting Dir Left) setup as OUT, initial HIGH (Relay OFF).")
-    print(f"GPIO_CONTROL: Pin {SORT_DIR_RIGHT_PIN} (Sorting Dir Right) setup as OUT, initial HIGH (Relay OFF).")
+    print(f"GPIO_CONTROL: Pin {MOTOR_PIN_1} (Motor Pin 1) setup as OUT, initial LOW (Relay OFF).")
+    print(f"GPIO_CONTROL: Pin {MOTOR_PIN_2} (Motor Pin 2) setup as OUT, initial LOW (Relay OFF).")
+    print(f"GPIO_CONTROL: Pin {SORT_MOTOR_PIN} (Sorting Motor) setup as OUT, initial LOW (Relay OFF).")
+    print(f"GPIO_CONTROL: Pin {SORT_DIR_LEFT_PIN} (Sorting Dir Left) setup as OUT, initial LOW (Relay OFF).")
+    print(f"GPIO_CONTROL: Pin {SORT_DIR_RIGHT_PIN} (Sorting Dir Right) setup as OUT, initial LOW (Relay OFF).")
     print(f"GPIO_CONTROL: Pin {SENSOR_PIN} (Sensor) setup as IN, PULL_DOWN.")
-    print("GPIO_CONTROL: GPIO setup complete (Active-LOW relays).")
+    print("GPIO_CONTROL: GPIO setup complete (Active-HIGH relays).")
 
 # --- Cleanup Function ---
 def cleanup_gpio():
@@ -181,12 +181,12 @@ def sort_card_right():
     """
     print("GPIO_CONTROL: Initiating sort RIGHT sequence.")
     if not RASPBERRY_PI_ENVIRONMENT:
-        print("GPIO_CONTROL: MOCK - Simulating sort_card_right() with Active-LOW relays")
+        print("GPIO_CONTROL: MOCK - Simulating sort_card_right() with Active-HIGH relays")
 
-    # GPIO 14 und 16 einschalten (Conveyor Motor ON = LOW)
-    GPIO.output(MOTOR_PIN_1, GPIO.LOW)
-    GPIO.output(MOTOR_PIN_2, GPIO.LOW)
-    print(f"GPIO_CONTROL: Conveyor motors ({MOTOR_PIN_1}, {MOTOR_PIN_2}) ON (Pins LOW)")
+    # GPIO 14 und 16 einschalten (Conveyor Motor ON = HIGH)
+    GPIO.output(MOTOR_PIN_1, GPIO.HIGH)
+    GPIO.output(MOTOR_PIN_2, GPIO.HIGH)
+    print(f"GPIO_CONTROL: Conveyor motors ({MOTOR_PIN_1}, {MOTOR_PIN_2}) ON (Pins HIGH)")
 
     # Warten, bis GPIO 24 HIGH (Karte erkannt) - Sensor logic unchanged
     print(f"GPIO_CONTROL: Waiting for card at sensor ({SENSOR_PIN} = HIGH)...")
@@ -197,10 +197,10 @@ def sort_card_right():
         time.sleep(0.01)
     print(f"GPIO_CONTROL: Card detected at sensor ({SENSOR_PIN} = HIGH)")
 
-    # GPIO 15 und 18 einschalten (Sorting Motor + Right Direction ON = LOW)
-    GPIO.output(SORT_MOTOR_PIN, GPIO.LOW)
-    GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.LOW)
-    print(f"GPIO_CONTROL: Sorting motor ({SORT_MOTOR_PIN}) and right direction ({SORT_DIR_RIGHT_PIN}) ON (Pins LOW)")
+    # GPIO 15 und 18 einschalten (Sorting Motor + Right Direction ON = HIGH)
+    GPIO.output(SORT_MOTOR_PIN, GPIO.HIGH)
+    GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.HIGH)
+    print(f"GPIO_CONTROL: Sorting motor ({SORT_MOTOR_PIN}) and right direction ({SORT_DIR_RIGHT_PIN}) ON (Pins HIGH)")
 
     # Warten, bis GPIO 24 LOW (Karte ist durch) - Sensor logic unchanged
     print(f"GPIO_CONTROL: Waiting for card to pass sensor ({SENSOR_PIN} = LOW)...")
@@ -221,21 +221,21 @@ def sort_card_right():
     print(f"GPIO_CONTROL: Sensor ({SENSOR_PIN}) is HIGH again.")
 
     # GPIO 15 und 18 für 12 ms einschalten (braking)
-    print(f"GPIO_CONTROL: Activating sorting motor ({SORT_MOTOR_PIN}) and right direction ({SORT_DIR_RIGHT_PIN}) for 12ms braking (Pins LOW)")
-    GPIO.output(SORT_MOTOR_PIN, GPIO.LOW)
-    GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.LOW)
-    time.sleep(0.012) # 12 ms
-
-    # Danach GPIO 15 und 18 ausschalten (Sorting Motor OFF = HIGH)
+    print(f"GPIO_CONTROL: Activating sorting motor ({SORT_MOTOR_PIN}) and right direction ({SORT_DIR_RIGHT_PIN}) for 12ms braking (Pins HIGH)")
     GPIO.output(SORT_MOTOR_PIN, GPIO.HIGH)
     GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.HIGH)
-    print(f"GPIO_CONTROL: Sorting motor ({SORT_MOTOR_PIN}) and right direction ({SORT_DIR_RIGHT_PIN}) OFF (Pins HIGH)")
+    time.sleep(0.012) # 12 ms
 
-    # Nach 600 ms GPIO 14 und 16 ausschalten (Conveyor Motor OFF = HIGH)
+    # Danach GPIO 15 und 18 ausschalten (Sorting Motor OFF = LOW)
+    GPIO.output(SORT_MOTOR_PIN, GPIO.LOW)
+    GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.LOW)
+    print(f"GPIO_CONTROL: Sorting motor ({SORT_MOTOR_PIN}) and right direction ({SORT_DIR_RIGHT_PIN}) OFF (Pins LOW)")
+
+    # Nach 600 ms GPIO 14 und 16 ausschalten (Conveyor Motor OFF = LOW)
     time.sleep(0.6) # 600 ms
-    GPIO.output(MOTOR_PIN_1, GPIO.HIGH)
-    GPIO.output(MOTOR_PIN_2, GPIO.HIGH)
-    print(f"GPIO_CONTROL: Conveyor motors ({MOTOR_PIN_1}, {MOTOR_PIN_2}) OFF (Pins HIGH)")
+    GPIO.output(MOTOR_PIN_1, GPIO.LOW)
+    GPIO.output(MOTOR_PIN_2, GPIO.LOW)
+    print(f"GPIO_CONTROL: Conveyor motors ({MOTOR_PIN_1}, {MOTOR_PIN_2}) OFF (Pins LOW)")
     print("GPIO_CONTROL: Sort RIGHT sequence complete.")
 
 
@@ -253,12 +253,12 @@ def sort_card_left():
     """
     print("GPIO_CONTROL: Initiating sort LEFT sequence.")
     if not RASPBERRY_PI_ENVIRONMENT:
-        print("GPIO_CONTROL: MOCK - Simulating sort_card_left() with Active-LOW relays")
+        print("GPIO_CONTROL: MOCK - Simulating sort_card_left() with Active-HIGH relays")
 
-    # GPIO 14 und 16 einschalten (Conveyor Motor ON = LOW)
-    GPIO.output(MOTOR_PIN_1, GPIO.LOW)
-    GPIO.output(MOTOR_PIN_2, GPIO.LOW)
-    print(f"GPIO_CONTROL: Conveyor motors ({MOTOR_PIN_1}, {MOTOR_PIN_2}) ON (Pins LOW)")
+    # GPIO 14 und 16 einschalten (Conveyor Motor ON = HIGH)
+    GPIO.output(MOTOR_PIN_1, GPIO.HIGH)
+    GPIO.output(MOTOR_PIN_2, GPIO.HIGH)
+    print(f"GPIO_CONTROL: Conveyor motors ({MOTOR_PIN_1}, {MOTOR_PIN_2}) ON (Pins HIGH)")
 
     # Warten, bis GPIO 24 HIGH - Sensor logic unchanged
     print(f"GPIO_CONTROL: Waiting for card at sensor ({SENSOR_PIN} = HIGH)...")
@@ -269,10 +269,10 @@ def sort_card_left():
         time.sleep(0.01)
     print(f"GPIO_CONTROL: Card detected at sensor ({SENSOR_PIN} = HIGH)")
 
-    # GPIO 15 und 19 einschalten (Sorting Motor + Left Direction ON = LOW)
-    GPIO.output(SORT_MOTOR_PIN, GPIO.LOW)
-    GPIO.output(SORT_DIR_LEFT_PIN, GPIO.LOW)
-    print(f"GPIO_CONTROL: Sorting motor ({SORT_MOTOR_PIN}) and left direction ({SORT_DIR_LEFT_PIN}) ON (Pins LOW)")
+    # GPIO 15 und 19 einschalten (Sorting Motor + Left Direction ON = HIGH)
+    GPIO.output(SORT_MOTOR_PIN, GPIO.HIGH)
+    GPIO.output(SORT_DIR_LEFT_PIN, GPIO.HIGH)
+    print(f"GPIO_CONTROL: Sorting motor ({SORT_MOTOR_PIN}) and left direction ({SORT_DIR_LEFT_PIN}) ON (Pins HIGH)")
 
     # Warten, bis GPIO 24 LOW - Sensor logic unchanged
     print(f"GPIO_CONTROL: Waiting for card to pass sensor ({SENSOR_PIN} = LOW)...")
@@ -293,65 +293,65 @@ def sort_card_left():
     print(f"GPIO_CONTROL: Sensor ({SENSOR_PIN}) is HIGH again.")
 
     # GPIO 15 und 19 für 12 ms einschalten (braking)
-    print(f"GPIO_CONTROL: Activating sorting motor ({SORT_MOTOR_PIN}) and left direction ({SORT_DIR_LEFT_PIN}) for 12ms braking (Pins LOW)")
-    GPIO.output(SORT_MOTOR_PIN, GPIO.LOW)
-    GPIO.output(SORT_DIR_LEFT_PIN, GPIO.LOW)
-    time.sleep(0.012) # 12 ms
-
-    # Danach GPIO 15 und 19 ausschalten (Sorting Motor OFF = HIGH)
+    print(f"GPIO_CONTROL: Activating sorting motor ({SORT_MOTOR_PIN}) and left direction ({SORT_DIR_LEFT_PIN}) for 12ms braking (Pins HIGH)")
     GPIO.output(SORT_MOTOR_PIN, GPIO.HIGH)
     GPIO.output(SORT_DIR_LEFT_PIN, GPIO.HIGH)
-    print(f"GPIO_CONTROL: Sorting motor ({SORT_MOTOR_PIN}) and left direction ({SORT_DIR_LEFT_PIN}) OFF (Pins HIGH)")
+    time.sleep(0.012) # 12 ms
 
-    # Nach 600 ms GPIO 14 und 16 ausschalten (Conveyor Motor OFF = HIGH)
+    # Danach GPIO 15 und 19 ausschalten (Sorting Motor OFF = LOW)
+    GPIO.output(SORT_MOTOR_PIN, GPIO.LOW)
+    GPIO.output(SORT_DIR_LEFT_PIN, GPIO.LOW)
+    print(f"GPIO_CONTROL: Sorting motor ({SORT_MOTOR_PIN}) and left direction ({SORT_DIR_LEFT_PIN}) OFF (Pins LOW)")
+
+    # Nach 600 ms GPIO 14 und 16 ausschalten (Conveyor Motor OFF = LOW)
     time.sleep(0.6) # 600 ms
-    GPIO.output(MOTOR_PIN_1, GPIO.HIGH)
-    GPIO.output(MOTOR_PIN_2, GPIO.HIGH)
-    print(f"GPIO_CONTROL: Conveyor motors ({MOTOR_PIN_1}, {MOTOR_PIN_2}) OFF (Pins HIGH)")
+    GPIO.output(MOTOR_PIN_1, GPIO.LOW)
+    GPIO.output(MOTOR_PIN_2, GPIO.LOW)
+    print(f"GPIO_CONTROL: Conveyor motors ({MOTOR_PIN_1}, {MOTOR_PIN_2}) OFF (Pins LOW)")
     print("GPIO_CONTROL: Sort LEFT sequence complete.")
 
 
 if __name__ == '__main__':
     # Example usage for testing module directly (if run as script)
-    print("GPIO_CONTROL: Running direct test (Active-LOW relay logic)...")
+    print("GPIO_CONTROL: Running direct test (Active-HIGH relay logic)...")
     try:
         setup_gpio()
         if not RASPBERRY_PI_ENVIRONMENT:
-            print("\nMock GPIO Test Simulation (Active-LOW relays):")
-            print(f"Simulating MOTOR_PIN_1 ({MOTOR_PIN_1}) Relay ON (Pin LOW)")
-            GPIO.output(MOTOR_PIN_1, GPIO.LOW) # Conveyor Motor 1 ON
+            print("\nMock GPIO Test Simulation (Active-HIGH relays):")
+            print(f"Simulating MOTOR_PIN_1 ({MOTOR_PIN_1}) Relay ON (Pin HIGH)")
+            GPIO.output(MOTOR_PIN_1, GPIO.HIGH) # Conveyor Motor 1 ON
             time.sleep(0.1)
 
-            print(f"Simulating MOTOR_PIN_2 ({MOTOR_PIN_2}) Relay ON (Pin LOW)")
-            GPIO.output(MOTOR_PIN_2, GPIO.LOW) # Conveyor Motor 2 ON
+            print(f"Simulating MOTOR_PIN_2 ({MOTOR_PIN_2}) Relay ON (Pin HIGH)")
+            GPIO.output(MOTOR_PIN_2, GPIO.HIGH) # Conveyor Motor 2 ON
             time.sleep(0.1)
 
             print(f"Simulating SENSOR_PIN ({SENSOR_PIN}) read (no card): {GPIO.input(SENSOR_PIN)}")
             GPIO._pin_states[SENSOR_PIN] = GPIO.HIGH # Simulate card detected
             print(f"Simulating SENSOR_PIN ({SENSOR_PIN}) read (card present): {GPIO.input(SENSOR_PIN)}")
 
-            print(f"Simulating SORT_MOTOR_PIN ({SORT_MOTOR_PIN}) Relay ON (Pin LOW)")
-            GPIO.output(SORT_MOTOR_PIN, GPIO.LOW) # Sorting Motor ON
+            print(f"Simulating SORT_MOTOR_PIN ({SORT_MOTOR_PIN}) Relay ON (Pin HIGH)")
+            GPIO.output(SORT_MOTOR_PIN, GPIO.HIGH) # Sorting Motor ON
             time.sleep(0.1)
 
-            print(f"Simulating SORT_DIR_LEFT_PIN ({SORT_DIR_LEFT_PIN}) Relay ON (Pin LOW)")
-            GPIO.output(SORT_DIR_LEFT_PIN, GPIO.LOW) # Left Direction ON
+            print(f"Simulating SORT_DIR_LEFT_PIN ({SORT_DIR_LEFT_PIN}) Relay ON (Pin HIGH)")
+            GPIO.output(SORT_DIR_LEFT_PIN, GPIO.HIGH) # Left Direction ON
             time.sleep(0.1)
 
-            print(f"Simulating SORT_DIR_RIGHT_PIN ({SORT_DIR_RIGHT_PIN}) Relay ON (Pin LOW)")
-            GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.LOW) # Right Direction ON
+            print(f"Simulating SORT_DIR_RIGHT_PIN ({SORT_DIR_RIGHT_PIN}) Relay ON (Pin HIGH)")
+            GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.HIGH) # Right Direction ON
             time.sleep(0.1)
 
-            print(f"Simulating MOTOR_PIN_1 ({MOTOR_PIN_1}) Relay OFF (Pin HIGH)")
-            GPIO.output(MOTOR_PIN_1, GPIO.HIGH) # Conveyor Motor 1 OFF
-            print(f"Simulating MOTOR_PIN_2 ({MOTOR_PIN_2}) Relay OFF (Pin HIGH)")
-            GPIO.output(MOTOR_PIN_2, GPIO.HIGH) # Conveyor Motor 2 OFF
-            print(f"Simulating SORT_MOTOR_PIN ({SORT_MOTOR_PIN}) Relay OFF (Pin HIGH)")
-            GPIO.output(SORT_MOTOR_PIN, GPIO.HIGH) # Sorting Motor OFF
-            print(f"Simulating SORT_DIR_LEFT_PIN ({SORT_DIR_LEFT_PIN}) Relay OFF (Pin HIGH)")
-            GPIO.output(SORT_DIR_LEFT_PIN, GPIO.HIGH) # Left Direction OFF
-            print(f"Simulating SORT_DIR_RIGHT_PIN ({SORT_DIR_RIGHT_PIN}) Relay OFF (Pin HIGH)")
-            GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.HIGH) # Right Direction OFF
+            print(f"Simulating MOTOR_PIN_1 ({MOTOR_PIN_1}) Relay OFF (Pin LOW)")
+            GPIO.output(MOTOR_PIN_1, GPIO.LOW) # Conveyor Motor 1 OFF
+            print(f"Simulating MOTOR_PIN_2 ({MOTOR_PIN_2}) Relay OFF (Pin LOW)")
+            GPIO.output(MOTOR_PIN_2, GPIO.LOW) # Conveyor Motor 2 OFF
+            print(f"Simulating SORT_MOTOR_PIN ({SORT_MOTOR_PIN}) Relay OFF (Pin LOW)")
+            GPIO.output(SORT_MOTOR_PIN, GPIO.LOW) # Sorting Motor OFF
+            print(f"Simulating SORT_DIR_LEFT_PIN ({SORT_DIR_LEFT_PIN}) Relay OFF (Pin LOW)")
+            GPIO.output(SORT_DIR_LEFT_PIN, GPIO.LOW) # Left Direction OFF
+            print(f"Simulating SORT_DIR_RIGHT_PIN ({SORT_DIR_RIGHT_PIN}) Relay OFF (Pin LOW)")
+            GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.LOW) # Right Direction OFF
 
             print("\n--- Simulating sort_card_left (mock) ---")
             sort_card_left()
@@ -360,12 +360,12 @@ if __name__ == '__main__':
 
         else: # Real RPi environment
             print("Real RPi.GPIO environment. Manual hardware interaction required for full test.")
-            print("Basic motor test: Conveyor motors ON (LOW) for 1s, then OFF (HIGH).")
-            GPIO.output(MOTOR_PIN_1, GPIO.LOW)  # Conveyor Motor 1 ON
-            GPIO.output(MOTOR_PIN_2, GPIO.LOW)  # Conveyor Motor 2 ON
+            print("Basic motor test: Conveyor motors ON (HIGH) for 1s, then OFF (LOW).")
+            GPIO.output(MOTOR_PIN_1, GPIO.HIGH)  # Conveyor Motor 1 ON
+            GPIO.output(MOTOR_PIN_2, GPIO.HIGH)  # Conveyor Motor 2 ON
             time.sleep(1)
-            GPIO.output(MOTOR_PIN_1, GPIO.HIGH) # Conveyor Motor 1 OFF
-            GPIO.output(MOTOR_PIN_2, GPIO.HIGH) # Conveyor Motor 2 OFF
+            GPIO.output(MOTOR_PIN_1, GPIO.LOW) # Conveyor Motor 1 OFF
+            GPIO.output(MOTOR_PIN_2, GPIO.LOW) # Conveyor Motor 2 OFF
             print("Motor test complete.")
 
     except Exception as e:
