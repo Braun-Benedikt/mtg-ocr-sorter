@@ -11,6 +11,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const applyFilterButton = document.getElementById('applyFilterButton');
     const clearFilterButton = document.getElementById('clearFilterButton');
     const configureCropButton = document.getElementById('configureCropButton');
+    
+    // Sorting rules elements
+    const addRuleButton = document.getElementById('addRuleButton');
+    const ruleNameInput = document.getElementById('ruleName');
+    const ruleAttributeSelect = document.getElementById('ruleAttribute');
+    const ruleOperatorSelect = document.getElementById('ruleOperator');
+    const ruleValueInput = document.getElementById('ruleValue');
+    const ruleDirectionSelect = document.getElementById('ruleDirection');
+    const rulesListDiv = document.getElementById('rulesList');
 
     if (configureCropButton) {
         configureCropButton.addEventListener('click', async () => {
@@ -206,4 +215,140 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initial load of cards
     fetchAndDisplayCards();
+    
+    // Sorting Rules Functions
+    const fetchAndDisplayRules = async () => {
+        try {
+            const response = await fetch('/sorting-rules');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const rules = await response.json();
+            renderRules(rules);
+        } catch (error) {
+            console.error('Error fetching sorting rules:', error);
+            rulesListDiv.innerHTML = '<p>Error loading sorting rules. Please try again.</p>';
+        }
+    };
+
+    const renderRules = (rules) => {
+        if (!rules || rules.length === 0) {
+            rulesListDiv.innerHTML = '<p>No sorting rules configured. Add a rule above to get started.</p>';
+            return;
+        }
+
+        rulesListDiv.innerHTML = '';
+        rules.forEach(rule => {
+            const ruleItem = document.createElement('div');
+            ruleItem.classList.add('rule-item');
+
+            const ruleInfo = document.createElement('div');
+            ruleInfo.classList.add('rule-info');
+
+            const ruleName = document.createElement('div');
+            ruleName.classList.add('rule-name');
+            ruleName.textContent = rule.name;
+
+            const ruleCondition = document.createElement('div');
+            ruleCondition.classList.add('rule-condition');
+            ruleCondition.textContent = `${rule.attribute} ${rule.operator} ${rule.value}`;
+
+            const ruleDirection = document.createElement('span');
+            ruleDirection.classList.add('rule-direction', rule.sort_direction);
+            ruleDirection.textContent = rule.sort_direction === 'left' ? 'Left Pile' : 'Right Pile';
+
+            ruleInfo.appendChild(ruleName);
+            ruleInfo.appendChild(ruleCondition);
+            ruleInfo.appendChild(ruleDirection);
+
+            const deleteButton = document.createElement('button');
+            deleteButton.classList.add('delete-rule-button');
+            deleteButton.textContent = 'Delete';
+            deleteButton.setAttribute('data-id', rule.id);
+
+            deleteButton.addEventListener('click', async (event) => {
+                const ruleId = event.target.getAttribute('data-id');
+                if (!confirm(`Are you sure you want to delete rule "${rule.name}"?`)) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`/sorting-rules/${ruleId}`, {
+                        method: 'DELETE',
+                    });
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        scanStatusDiv.textContent = result.message || `Rule "${rule.name}" deleted successfully.`;
+                        fetchAndDisplayRules(); // Refresh the list
+                    } else {
+                        throw new Error(result.error || `Failed to delete rule. Status: ${response.status}`);
+                    }
+                } catch (error) {
+                    console.error('Error deleting rule:', error);
+                    scanStatusDiv.textContent = `Error deleting rule: ${error.message}`;
+                }
+            });
+
+            ruleItem.appendChild(ruleInfo);
+            ruleItem.appendChild(deleteButton);
+            rulesListDiv.appendChild(ruleItem);
+        });
+    };
+
+    if (addRuleButton) {
+        addRuleButton.addEventListener('click', async () => {
+            const name = ruleNameInput.value.trim();
+            const attribute = ruleAttributeSelect.value;
+            const operator = ruleOperatorSelect.value;
+            const value = ruleValueInput.value.trim();
+            const sortDirection = ruleDirectionSelect.value;
+
+            if (!name || !value) {
+                scanStatusDiv.textContent = 'Please fill in all required fields.';
+                return;
+            }
+
+            addRuleButton.disabled = true;
+            try {
+                const response = await fetch('/sorting-rules', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        attribute: attribute,
+                        operator: operator,
+                        value: value,
+                        sort_direction: sortDirection
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    scanStatusDiv.textContent = result.message || 'Sorting rule added successfully.';
+                    // Clear form
+                    ruleNameInput.value = '';
+                    ruleValueInput.value = '';
+                    ruleAttributeSelect.selectedIndex = 0;
+                    ruleOperatorSelect.selectedIndex = 0;
+                    ruleDirectionSelect.selectedIndex = 0;
+                    // Refresh rules list
+                    fetchAndDisplayRules();
+                } else {
+                    throw new Error(result.error || `Failed to add rule. Status: ${response.status}`);
+                }
+            } catch (error) {
+                console.error('Error adding sorting rule:', error);
+                scanStatusDiv.textContent = `Error adding sorting rule: ${error.message}`;
+            } finally {
+                addRuleButton.disabled = false;
+            }
+        });
+    }
+
+    // Initial load of sorting rules
+    fetchAndDisplayRules();
 });

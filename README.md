@@ -34,6 +34,7 @@ This project aims to catalog and sort Magic: The Gathering (MTG) cards using ima
     *   **Card Deletion:** Easily remove cards from the database via the web interface.
     *   **Web-Triggered Crop Configuration:** Initiate the crop area setup process from the web UI (interaction occurs in the server console).
     *   **EDHREC Deck Suggestions:** Recommends a Commander and a list of owned cards for a potential deck, based on your collected legendary creatures and suggestions from EDHREC.
+    *   **Custom Sorting Rules:** Configure automatic sorting rules based on card attributes (CMC, price, color identity, type line, name). Rules can use various operators (>, >=, <, <=, =, !=, contains, starts_with, ends_with) to determine which pile cards should be sorted into.
 *   **Dictionary Management:**
     *   Includes tools to build an initial card name dictionary by fetching data from Scryfall.
     *   Provides scripts to clean and process this dictionary for optimal use with SymSpell.
@@ -209,6 +210,20 @@ The web application provides a richer, interactive experience for managing your 
         *   The system identifies legendary creatures in your collection.
         *   It then queries EDHREC for popular cards associated with those commanders.
         *   It determines which commander has the most matching cards already in your collection and displays the commander, the list of owned suggested cards, and the match count.
+    *   **Custom Sorting Rules:**
+        *   **Adding Rules:** Use the "Custom Sorting Rules" section to create automatic sorting rules. Each rule consists of:
+            *   **Rule Name:** A descriptive name for the rule (e.g., "High CMC Cards")
+            *   **Attribute:** The card property to check (CMC, Price, Color Identity, Type Line, or Card Name)
+            *   **Operator:** Comparison operator (>, >=, <, <=, =, !=, contains, starts_with, ends_with)
+            *   **Value:** The value to compare against
+            *   **Sort Direction:** Which pile the card should go to (Left or Right)
+        *   **Rule Examples:**
+            *   CMC > 3 → Left Pile (high mana cost cards)
+            *   Price >= 20.0 → Right Pile (expensive cards)
+            *   Color Identity contains "U" → Left Pile (blue cards)
+            *   Type Line contains "Creature" → Right Pile (creatures)
+        *   **Rule Evaluation:** When a card is scanned, the system evaluates all active rules in order. The first matching rule determines the sort direction. If no rules match, recognized cards go right and unrecognized cards go left.
+        *   **Managing Rules:** View all active rules in the "Active Rules" section. Delete rules by clicking the "Delete" button next to each rule.
 
 ## 8. Database
 
@@ -229,6 +244,7 @@ The project includes a complete hardware control system for physical card sortin
 *   **Sorting Operations:**
     *   **Right Sorting:** Activates motor, waits for card detection, triggers main sorting mechanism, then activates left flap for timing control.
     *   **Left Sorting:** Similar sequence but with different timing and mechanism activation.
+    *   **Custom Sorting:** Automatically determines sort direction based on configured rules. If no rules are set, recognized cards go right and unrecognized cards go left.
     *   **Development Mode:** Mock GPIO interface allows development and testing on non-Raspberry Pi systems.
 *   **Hardware Requirements:**
     *   Raspberry Pi with GPIO access
