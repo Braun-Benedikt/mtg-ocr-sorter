@@ -82,71 +82,7 @@
             </div>
         </div>
 
-        <!-- Custom Sorting Rules Section -->
-        <div class="sorting-rules-section">
-            <div class="card">
-                <h2>Custom Sorting Rules</h2>
-                <p style="color: var(--gray-600); margin-bottom: var(--spacing-6);">
-                    Configure automatic sorting rules to organize cards based on their attributes.
-                </p>
-                
-                <div class="add-rule-form">
-                    <h3>Add New Rule</h3>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="ruleName" class="form-label">Rule Name</label>
-                            <input type="text" id="ruleName" class="form-input" placeholder="e.g., High CMC Cards">
-                        </div>
-                        <div class="form-group">
-                            <label for="ruleAttribute" class="form-label">Attribute</label>
-                            <select id="ruleAttribute" class="form-select">
-                                <option value="cmc">Mana Value (CMC)</option>
-                                <option value="price">Price</option>
-                                <option value="color_identity">Color Identity</option>
-                                <option value="type_line">Type Line</option>
-                                <option value="name">Card Name</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="ruleOperator" class="form-label">Operator</label>
-                            <select id="ruleOperator" class="form-select">
-                                <option value=">">Greater than (>)</option>
-                                <option value=">=">Greater than or equal (>=)</option>
-                                <option value="<">Less than (<)</option>
-                                <option value="<=">Less than or equal (<=)</option>
-                                <option value="=">Equal (=)</option>
-                                <option value="!=">Not equal (!=)</option>
-                                <option value="contains">Contains</option>
-                                <option value="starts_with">Starts with</option>
-                                <option value="ends_with">Ends with</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="ruleValue" class="form-label">Value</label>
-                            <input type="text" id="ruleValue" class="form-input" placeholder="e.g., 3, 10.50, W, Creature">
-                        </div>
-                        <div class="form-group">
-                            <label for="ruleDirection" class="form-label">Sort Direction</label>
-                            <select id="ruleDirection" class="form-select">
-                                <option value="left">Left Pile</option>
-                                <option value="right">Right Pile</option>
-                            </select>
-                        </div>
-                    </div>
-                    <button id="addRuleButton" class="btn btn-success">Add Rule</button>
-                </div>
 
-                <div class="rules-list">
-                    <h3>Active Rules</h3>
-                    <div id="rulesList">
-                        <!-- Rules will be loaded here by JavaScript -->
-                        <p style="color: var(--gray-500); text-align: center; padding: var(--spacing-8);">Loading rules...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- Cards List Card -->
         <div class="card">

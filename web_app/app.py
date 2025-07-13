@@ -110,7 +110,20 @@ def scan_card():
     if processed_card_data and processed_card_data.get("id"):
         try: os.remove(image_path)
         except OSError as e: print(f"Error removing temporary image {image_path}: {e}")
-        return jsonify(processed_card_data), 201
+        
+        # Add quantity information to response
+        response_data = processed_card_data.copy()
+        try:
+            cards = get_cards()
+            for card in cards:
+                if card.get("id") == processed_card_data.get("id"):
+                    response_data["quantity"] = card.get("quantity", 1)
+                    break
+        except Exception as e:
+            print(f"Error getting quantity: {e}")
+            response_data["quantity"] = 1
+        
+        return jsonify(response_data), 201
     elif processed_card_data:
         return jsonify({"message": "Image processed, but no card identified or saved.", "details": processed_card_data}), 200
     else:

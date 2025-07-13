@@ -209,7 +209,7 @@ body {
 }
 
 .btn-warning {
-    background: linear-gradient(135deg, var(--warning-color), var(--warning-hover));
+    background: linear-gradient(135deg, var(--secondary-color), var(--gray-600));
     color: white;
 }
 
@@ -428,82 +428,7 @@ body {
     border: 1px solid rgb(59 130 246 / 0.2);
 }
 
-/* Modern Sorting Rules Section */
-.sorting-rules-section {
-    margin: var(--spacing-8) 0;
-}
 
-.add-rule-form {
-    background: white;
-    border-radius: var(--radius-xl);
-    padding: var(--spacing-8);
-    box-shadow: var(--shadow-lg);
-    border: 1px solid var(--gray-200);
-    margin-bottom: var(--spacing-8);
-}
-
-.rules-list {
-    background: white;
-    border-radius: var(--radius-xl);
-    padding: var(--spacing-8);
-    box-shadow: var(--shadow-lg);
-    border: 1px solid var(--gray-200);
-}
-
-.rule-item {
-    background: var(--gray-50);
-    border: 1px solid var(--gray-200);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-6);
-    margin-bottom: var(--spacing-4);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    transition: all 0.3s ease;
-}
-
-.rule-item:hover {
-    background: white;
-    box-shadow: var(--shadow-md);
-}
-
-.rule-info {
-    flex: 1;
-}
-
-.rule-name {
-    font-weight: 600;
-    color: var(--gray-900);
-    margin-bottom: var(--spacing-2);
-    font-size: var(--font-size-lg);
-}
-
-.rule-condition {
-    color: var(--gray-600);
-    font-size: var(--font-size-sm);
-    margin-bottom: var(--spacing-2);
-}
-
-.rule-direction {
-    display: inline-flex;
-    align-items: center;
-    padding: var(--spacing-1) var(--spacing-3);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-xs);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.rule-direction.left {
-    background: rgb(239 68 68 / 0.1);
-    color: var(--danger-color);
-}
-
-.rule-direction.right {
-    background: rgb(16 185 129 / 0.1);
-    color: var(--success-color);
-}
 
 /* Modern Icons (using CSS) */
 .icon {

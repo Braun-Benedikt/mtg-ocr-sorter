@@ -12,14 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const clearFilterButton = document.getElementById('clearFilterButton');
     const configureCropButton = document.getElementById('configureCropButton');
     
-    // Sorting rules elements
-    const addRuleButton = document.getElementById('addRuleButton');
-    const ruleNameInput = document.getElementById('ruleName');
-    const ruleAttributeSelect = document.getElementById('ruleAttribute');
-    const ruleOperatorSelect = document.getElementById('ruleOperator');
-    const ruleValueInput = document.getElementById('ruleValue');
-    const ruleDirectionSelect = document.getElementById('ruleDirection');
-    const rulesListDiv = document.getElementById('rulesList');
+
 
     // Utility function to show status messages
     const showStatus = (message, type = 'info') => {
@@ -38,11 +31,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Utility function to update statistics
     const updateStats = (cards) => {
         if (cardCountDisplay) {
-            cardCountDisplay.textContent = cards.length;
+            const totalCards = cards.reduce((sum, card) => {
+                return sum + (card.quantity || 1);
+            }, 0);
+            cardCountDisplay.textContent = totalCards;
         }
         if (totalPriceDisplay) {
             const totalPrice = cards.reduce((sum, card) => {
-                return sum + (card.price && !isNaN(card.price) ? parseFloat(card.price) : 0);
+                const cardPrice = card.price && !isNaN(card.price) ? parseFloat(card.price) : 0;
+                const quantity = card.quantity || 1;
+                return sum + (cardPrice * quantity);
             }, 0);
             totalPriceDisplay.textContent = `€${totalPrice.toFixed(2)}`;
         }
@@ -131,10 +129,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const detailsDiv = document.createElement('div');
             detailsDiv.classList.add('card-details');
 
-            // Card name as prominent header
+            // Card name as prominent header with quantity
             const cardName = document.createElement('div');
             cardName.classList.add('card-name');
-            cardName.textContent = card.name || 'Unknown Card';
+            const quantity = card.quantity || 1;
+            if (quantity > 1) {
+                cardName.innerHTML = `${card.name || 'Unknown Card'} <span style="background: var(--primary-color); color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; margin-left: 8px;">×${quantity}</span>`;
+            } else {
+                cardName.textContent = card.name || 'Unknown Card';
+            }
             detailsDiv.appendChild(cardName);
 
             // Card metadata in grid layout
@@ -146,6 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 { label: 'CMC', value: card.cmc !== null ? card.cmc : 'N/A' },
                 { label: 'Colors', value: card.color_identity || 'N/A' },
                 { label: 'Type', value: card.type_line || 'N/A' },
+                { label: 'Quantity', value: card.quantity || 1 },
                 { label: 'Scanned', value: card.timestamp || 'N/A' }
             ];
 
@@ -222,7 +226,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (response.ok) {
                     let statusMessage = `Card '${result.name || 'Unknown'}' processed.`;
                     if (result.id) {
-                        statusMessage = `Card '${result.name}' scanned successfully!`;
+                        // Check if this was a duplicate (quantity > 1)
+                        if (result.quantity && result.quantity > 1) {
+                            statusMessage = `Card '${result.name}' quantity increased to ${result.quantity}!`;
+                        } else {
+                            statusMessage = `Card '${result.name}' scanned successfully!`;
+                        }
                     } else if (result.message) {
                         statusMessage = result.message;
                     }
@@ -261,150 +270,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Sorting Rules Functions
-    const fetchAndDisplayRules = async () => {
-        try {
-            const response = await fetch('/sorting-rules');
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const rules = await response.json();
-            renderRules(rules);
-        } catch (error) {
-            console.error('Error fetching sorting rules:', error);
-            rulesListDiv.innerHTML = '<p style="color: var(--danger-color); text-align: center; padding: var(--spacing-8);">Error loading sorting rules. Please try again.</p>';
-        }
-    };
-
-    const renderRules = (rules) => {
-        if (!rules || rules.length === 0) {
-            rulesListDiv.innerHTML = '<p style="color: var(--gray-500); text-align: center; padding: var(--spacing-8);">No sorting rules configured. Add a rule above to get started.</p>';
-            return;
-        }
-
-        rulesListDiv.innerHTML = '';
-        rules.forEach(rule => {
-            const ruleItem = document.createElement('div');
-            ruleItem.classList.add('rule-item');
-
-            const ruleInfo = document.createElement('div');
-            ruleInfo.classList.add('rule-info');
-
-            const ruleName = document.createElement('div');
-            ruleName.classList.add('rule-name');
-            ruleName.textContent = rule.name;
-
-            const ruleCondition = document.createElement('div');
-            ruleCondition.classList.add('rule-condition');
-            ruleCondition.textContent = `${rule.attribute} ${rule.operator} ${rule.value}`;
-
-            const ruleDirection = document.createElement('span');
-            ruleDirection.classList.add('rule-direction', rule.sort_direction);
-            ruleDirection.textContent = rule.sort_direction === 'left' ? 'Left Pile' : 'Right Pile';
-
-            ruleInfo.appendChild(ruleName);
-            ruleInfo.appendChild(ruleCondition);
-            ruleInfo.appendChild(ruleDirection);
-
-            const deleteButton = document.createElement('button');
-            deleteButton.classList.add('btn', 'btn-danger');
-            deleteButton.innerHTML = '<span class="icon icon-delete"></span> Delete';
-            deleteButton.setAttribute('data-id', rule.id);
-
-            deleteButton.addEventListener('click', async (event) => {
-                const ruleId = event.target.closest('button').getAttribute('data-id');
-                if (!confirm(`Are you sure you want to delete rule "${rule.name}"?`)) {
-                    return;
-                }
-
-                showStatus(`Deleting rule...`, 'info');
-                deleteButton.disabled = true;
-                deleteButton.classList.add('loading');
-
-                try {
-                    const response = await fetch(`/sorting-rules/${ruleId}`, {
-                        method: 'DELETE',
-                    });
-                    const result = await response.json();
-
-                    if (response.ok) {
-                        showStatus(result.message || `Rule "${rule.name}" deleted successfully.`, 'success');
-                        fetchAndDisplayRules(); // Refresh the list
-                    } else {
-                        throw new Error(result.error || `Failed to delete rule. Status: ${response.status}`);
-                    }
-                } catch (error) {
-                    console.error('Error deleting rule:', error);
-                    showStatus(`Error deleting rule: ${error.message}`, 'error');
-                } finally {
-                    deleteButton.disabled = false;
-                    deleteButton.classList.remove('loading');
-                }
-            });
-
-            ruleItem.appendChild(ruleInfo);
-            ruleItem.appendChild(deleteButton);
-            rulesListDiv.appendChild(ruleItem);
-        });
-    };
-
-    if (addRuleButton) {
-        addRuleButton.addEventListener('click', async () => {
-            const name = ruleNameInput.value.trim();
-            const attribute = ruleAttributeSelect.value;
-            const operator = ruleOperatorSelect.value;
-            const value = ruleValueInput.value.trim();
-            const sortDirection = ruleDirectionSelect.value;
-
-            if (!name || !value) {
-                showStatus('Please fill in all required fields.', 'error');
-                return;
-            }
-
-            addRuleButton.disabled = true;
-            addRuleButton.classList.add('loading');
-            
-            try {
-                const response = await fetch('/sorting-rules', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        name: name,
-                        attribute: attribute,
-                        operator: operator,
-                        value: value,
-                        sort_direction: sortDirection
-                    })
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    showStatus(result.message || 'Sorting rule added successfully.', 'success');
-                    // Clear form
-                    ruleNameInput.value = '';
-                    ruleValueInput.value = '';
-                    ruleAttributeSelect.selectedIndex = 0;
-                    ruleOperatorSelect.selectedIndex = 0;
-                    ruleDirectionSelect.selectedIndex = 0;
-                    // Refresh rules list
-                    fetchAndDisplayRules();
-                } else {
-                    throw new Error(result.error || `Failed to add rule. Status: ${response.status}`);
-                }
-            } catch (error) {
-                console.error('Error adding sorting rule:', error);
-                showStatus(`Error adding sorting rule: ${error.message}`, 'error');
-            } finally {
-                addRuleButton.disabled = false;
-                addRuleButton.classList.remove('loading');
-            }
-        });
-    }
-
-    // Initial load of cards and rules
+    // Initial load of cards
     fetchAndDisplayCards();
-    fetchAndDisplayRules();
 });

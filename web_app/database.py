@@ -1,6 +1,7 @@
 import sqlite3
 import os
 from datetime import datetime
+from typing import Optional
 
 DATABASE_NAME = 'magic_cards.db'
 DATABASE_PATH = os.path.join(os.path.dirname(__file__), DATABASE_NAME)
@@ -24,32 +25,49 @@ def init_db():
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             cmc REAL,
             type_line TEXT,
-            image_uri TEXT
+            image_uri TEXT,
+            quantity INTEGER DEFAULT 1
         )
     ''')
     conn.commit()
     conn.close()
     print(f"Database initialized at {DATABASE_PATH}")
 
-def add_card(name: str, ocr_name_raw: str = None, price: float = None, color_identity: str = None, image_path: str = None, cmc: float = 0.0, type_line: str = '', image_uri: str = ''):
+def add_card(name: str, ocr_name_raw: Optional[str] = None, price: Optional[float] = None, color_identity: Optional[str] = None, image_path: Optional[str] = None, cmc: float = 0.0, type_line: str = '', image_uri: str = ''):
     conn = get_db_connection()
     cursor = conn.cursor()
-    timestamp = datetime.now()
-    cursor.execute('''
-        INSERT INTO cards (name, ocr_name_raw, price, color_identity, image_path, timestamp, cmc, type_line, image_uri)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (name, ocr_name_raw, price, color_identity, image_path, timestamp, cmc, type_line, image_uri))
-    card_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
-    print(f"Added card: {name}, ID: {card_id}")
-    return card_id
+    
+    # Check if card already exists
+    cursor.execute('SELECT id, quantity FROM cards WHERE name = ?', (name,))
+    existing_card = cursor.fetchone()
+    
+    if existing_card:
+        # Card exists, increment quantity
+        card_id = existing_card['id']
+        new_quantity = existing_card['quantity'] + 1
+        cursor.execute('UPDATE cards SET quantity = ? WHERE id = ?', (new_quantity, card_id))
+        conn.commit()
+        conn.close()
+        print(f"Incremented quantity for card: {name}, ID: {card_id}, New quantity: {new_quantity}")
+        return card_id
+    else:
+        # Card doesn't exist, add new card
+        timestamp = datetime.now()
+        cursor.execute('''
+            INSERT INTO cards (name, ocr_name_raw, price, color_identity, image_path, timestamp, cmc, type_line, image_uri, quantity)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        ''', (name, ocr_name_raw, price, color_identity, image_path, timestamp, cmc, type_line, image_uri))
+        card_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        print(f"Added new card: {name}, ID: {card_id}")
+        return card_id
 
-def get_cards(color: str = None, mana_cost: float = None, max_price: float = None):
+def get_cards(color: Optional[str] = None, mana_cost: Optional[float] = None, max_price: Optional[float] = None):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    query = "SELECT id, name, ocr_name_raw, price, color_identity, image_path, strftime('%Y-%m-%d %H:%M:%S', timestamp) as timestamp, cmc, type_line, image_uri FROM cards"
+    query = "SELECT id, name, ocr_name_raw, price, color_identity, image_path, strftime('%Y-%m-%d %H:%M:%S', timestamp) as timestamp, cmc, type_line, image_uri, quantity FROM cards"
     conditions = []
     params = []
 
@@ -85,7 +103,7 @@ def get_legendary_creatures():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    query = "SELECT id, name, ocr_name_raw, price, color_identity, image_path, strftime('%Y-%m-%d %H:%M:%S', timestamp) as timestamp, cmc, type_line, image_uri FROM cards WHERE type_line LIKE 'Legendary Creature%'"
+    query = "SELECT id, name, ocr_name_raw, price, color_identity, image_path, strftime('%Y-%m-%d %H:%M:%S', timestamp) as timestamp, cmc, type_line, image_uri, quantity FROM cards WHERE type_line LIKE 'Legendary Creature%'"
 
     cursor.execute(query)
     cards = cursor.fetchall()
