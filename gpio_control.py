@@ -222,6 +222,10 @@ def sort_card_right():
 
     # GPIO 15 und 19 für 12 ms einschalten (braking with opposite direction)
     print(f"GPIO_CONTROL: Activating sorting motor ({SORT_MOTOR_PIN}) and opposite direction for 12ms braking (Pins HIGH)")
+    # Ensure previous direction is off
+    GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.LOW)
+
+    # Activate braking
     GPIO.output(SORT_MOTOR_PIN, GPIO.HIGH)
     GPIO.output(SORT_DIR_LEFT_PIN, GPIO.HIGH)  # Use opposite direction for braking
     time.sleep(0.012) # 12 ms
@@ -292,8 +296,12 @@ def sort_card_left():
         time.sleep(0.01)
     print(f"GPIO_CONTROL: Sensor ({SENSOR_PIN}) is HIGH again.")
 
-    # GPIO 15 und 18 für 12 ms einschalten (braking with opposite direction)
+    # GPIO 15 und 19 für 12 ms einschalten (braking with opposite direction)
     print(f"GPIO_CONTROL: Activating sorting motor ({SORT_MOTOR_PIN}) and opposite direction for 12ms braking (Pins HIGH)")
+    # Ensure previous direction is off
+    GPIO.output(SORT_DIR_LEFT_PIN, GPIO.LOW)
+
+    # Activate braking
     GPIO.output(SORT_MOTOR_PIN, GPIO.HIGH)
     GPIO.output(SORT_DIR_RIGHT_PIN, GPIO.HIGH)  # Use opposite direction for braking
     time.sleep(0.012) # 12 ms
