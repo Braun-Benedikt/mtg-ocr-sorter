@@ -3,47 +3,161 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Magic Card Scanner</title>
+    <title>MTG Card Scanner & Sorter</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
-        <h1>Magic: The Gathering Card Scanner</h1>
+        <!-- Modern Header -->
+        <header class="header">
+            <h1>MTG Card Scanner & Sorter</h1>
+            <p>Scan, identify, and automatically sort your Magic: The Gathering cards</p>
+        </header>
 
-        <div class="controls">
-            <button id="scanButton">Scan Card</button>
-            <button id="configureCropButton">Configure Crop Coordinates</button> <!-- New button -->
-            <a href="/export/csv" class="button" id="downloadCsvButton">Download CSV</a>
-            <a href="{{ url_for('deck_suggestions_route') }}" class="button" id="deckSuggestionsButton">Deck Suggestions</a>
+        <!-- Main Controls Card -->
+        <div class="card">
+            <h2>Quick Actions</h2>
+            <div class="controls">
+                <button id="scanButton" class="btn btn-success">
+                    <span class="icon icon-scan"></span>
+                    Scan Card
+                </button>
+                <button id="configureCropButton" class="btn btn-warning">
+                    <span class="icon icon-settings"></span>
+                    Configure Crop
+                </button>
+                <a href="/export/csv" class="btn btn-info" id="downloadCsvButton">
+                    <span class="icon icon-download"></span>
+                    Download CSV
+                </a>
+                <a href="{{ url_for('deck_suggestions_route') }}" class="btn btn-primary" id="deckSuggestionsButton">
+                    <span class="icon icon-deck"></span>
+                    Deck Suggestions
+                </a>
+            </div>
         </div>
 
-        <div class="filters">
-            <label for="colorFilter">Filter by Color:</label>
-            <input type="text" id="colorFilter" placeholder="e.g., W, U, B, R, G, C, WU, etc.">
-
-            <!-- Mana cost filter placeholder - can be enhanced later -->
-            <label for="manaCostFilter">Filter by Mana Cost (CMC):</label>
-            <input type="number" id="manaCostFilter" placeholder="e.g., 2">
-
-            <label for="maxPriceFilter">Filter by Max Price:</label>
-            <input type="number" id="maxPriceFilter" placeholder="e.g., 10.50" step="0.01">
-
-            <button id="applyFilterButton">Apply Filters</button>
-            <button id="clearFilterButton">Clear Filters</button>
+        <!-- Status Messages -->
+        <div id="scanStatus" class="status-message status-info" style="display: none;">
+            <!-- Status messages will be inserted here -->
         </div>
 
+        <!-- Summary Statistics -->
         <div class="summary-stats">
-            <p id="cardCountDisplay">Loading card count...</p>
-            <p id="totalPriceDisplay">Loading total price...</p>
+            <div class="stat-card">
+                <div class="stat-value" id="cardCountDisplay">0</div>
+                <div class="stat-label">Cards Scanned</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalPriceDisplay">€0.00</div>
+                <div class="stat-label">Total Value</div>
+            </div>
         </div>
 
-        <h2>Scanned Cards</h2>
-        <div id="scanStatus"></div>
-        <div id="cardList">
-            <!-- Cards will be loaded here by JavaScript -->
-            <p>Loading cards...</p>
+        <!-- Filters Card -->
+        <div class="card">
+            <h2>Filter Cards</h2>
+            <div class="filters">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="colorFilter" class="form-label">Color Identity</label>
+                        <input type="text" id="colorFilter" class="form-input" placeholder="e.g., W, U, B, R, G, C, WU, etc.">
+                    </div>
+                    <div class="form-group">
+                        <label for="manaCostFilter" class="form-label">Mana Cost (CMC)</label>
+                        <input type="number" id="manaCostFilter" class="form-input" placeholder="e.g., 2">
+                    </div>
+                    <div class="form-group">
+                        <label for="maxPriceFilter" class="form-label">Max Price (€)</label>
+                        <input type="number" id="maxPriceFilter" class="form-input" placeholder="e.g., 10.50" step="0.01">
+                    </div>
+                </div>
+                <div class="controls">
+                    <button id="applyFilterButton" class="btn btn-primary">Apply Filters</button>
+                    <button id="clearFilterButton" class="btn btn-secondary">Clear Filters</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Sorting Rules Section -->
+        <div class="sorting-rules-section">
+            <div class="card">
+                <h2>Custom Sorting Rules</h2>
+                <p style="color: var(--gray-600); margin-bottom: var(--spacing-6);">
+                    Configure automatic sorting rules to organize cards based on their attributes.
+                </p>
+                
+                <div class="add-rule-form">
+                    <h3>Add New Rule</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="ruleName" class="form-label">Rule Name</label>
+                            <input type="text" id="ruleName" class="form-input" placeholder="e.g., High CMC Cards">
+                        </div>
+                        <div class="form-group">
+                            <label for="ruleAttribute" class="form-label">Attribute</label>
+                            <select id="ruleAttribute" class="form-select">
+                                <option value="cmc">Mana Value (CMC)</option>
+                                <option value="price">Price</option>
+                                <option value="color_identity">Color Identity</option>
+                                <option value="type_line">Type Line</option>
+                                <option value="name">Card Name</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="ruleOperator" class="form-label">Operator</label>
+                            <select id="ruleOperator" class="form-select">
+                                <option value=">">Greater than (>)</option>
+                                <option value=">=">Greater than or equal (>=)</option>
+                                <option value="<">Less than (<)</option>
+                                <option value="<=">Less than or equal (<=)</option>
+                                <option value="=">Equal (=)</option>
+                                <option value="!=">Not equal (!=)</option>
+                                <option value="contains">Contains</option>
+                                <option value="starts_with">Starts with</option>
+                                <option value="ends_with">Ends with</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="ruleValue" class="form-label">Value</label>
+                            <input type="text" id="ruleValue" class="form-input" placeholder="e.g., 3, 10.50, W, Creature">
+                        </div>
+                        <div class="form-group">
+                            <label for="ruleDirection" class="form-label">Sort Direction</label>
+                            <select id="ruleDirection" class="form-select">
+                                <option value="left">Left Pile</option>
+                                <option value="right">Right Pile</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button id="addRuleButton" class="btn btn-success">Add Rule</button>
+                </div>
+
+                <div class="rules-list">
+                    <h3>Active Rules</h3>
+                    <div id="rulesList">
+                        <!-- Rules will be loaded here by JavaScript -->
+                        <p style="color: var(--gray-500); text-align: center; padding: var(--spacing-8);">Loading rules...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cards List Card -->
+        <div class="card">
+            <h2>Scanned Cards</h2>
+            <div id="cardList" class="card-list">
+                <!-- Cards will be loaded here by JavaScript -->
+                <p style="color: var(--gray-500); text-align: center; padding: var(--spacing-8);">Loading cards...</p>
+            </div>
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script></body>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
 </html>
