@@ -44,6 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 0);
             totalPriceDisplay.textContent = `€${totalPrice.toFixed(2)}`;
         }
+        
+
     };
 
     if (configureCropButton) {
@@ -104,12 +106,28 @@ document.addEventListener('DOMContentLoaded', () => {
             if (cards.length > 0) {
                 showStatus(`Loaded ${cards.length} card(s) successfully.`, 'success');
             } else {
-                showStatus('No cards found matching the current filters.', 'info');
+                // Check if there are any filters applied
+                const hasFilters = (colorFilterInput && colorFilterInput.value) || 
+                                 (manaCostFilterInput && manaCostFilterInput.value) || 
+                                 (maxPriceFilterInput && maxPriceFilterInput.value);
+                
+                if (hasFilters) {
+                    showStatus('No cards found matching the current filters.', 'info');
+                } else {
+                    showStatus('No cards scanned yet. Start by scanning your first card!', 'info');
+                }
             }
 
         } catch (error) {
             console.error('Error fetching cards:', error);
-            cardListDiv.innerHTML = '<p style="color: var(--danger-color); text-align: center; padding: var(--spacing-8);">Error loading cards. Please try again.</p>';
+            cardListDiv.innerHTML = `
+                <div style="text-align: center; padding: var(--spacing-12); color: var(--danger-color);">
+                    <div style="font-size: 3rem; margin-bottom: var(--spacing-4);">⚠️</div>
+                    <h3 style="margin-bottom: var(--spacing-4);">Error Loading Cards</h3>
+                    <p style="margin-bottom: var(--spacing-6);">There was a problem loading your scanned cards. Please try refreshing the page.</p>
+                    <button onclick="location.reload()" class="btn btn-primary">Refresh Page</button>
+                </div>
+            `;
             showStatus('Error loading cards.', 'error');
             updateStats([]);
         }
@@ -117,7 +135,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const renderCards = (cards) => {
         if (!cards || cards.length === 0) {
-            cardListDiv.innerHTML = '<p style="color: var(--gray-500); text-align: center; padding: var(--spacing-8);">No cards scanned yet, or none match current filters.</p>';
+            cardListDiv.innerHTML = `
+                <div style="text-align: center; padding: var(--spacing-12); color: var(--gray-600);">
+                    <div style="font-size: 3rem; margin-bottom: var(--spacing-4);">📷</div>
+                    <h3 style="margin-bottom: var(--spacing-4); color: var(--gray-700);">No Cards Scanned Yet</h3>
+                    <p style="margin-bottom: var(--spacing-6);">Start by scanning your first Magic card using the camera button above.</p>
+                    <div style="background: var(--gray-50); border: 2px dashed var(--gray-300); border-radius: var(--radius-lg); padding: var(--spacing-6); margin: 0 auto; max-width: 400px;">
+                        <p style="margin: 0; font-size: var(--font-size-sm); color: var(--gray-500);">
+                            <strong>Tip:</strong> Make sure your card is well-lit and clearly visible in the camera view.
+                        </p>
+                    </div>
+                </div>
+            `;
             return;
         }
 
