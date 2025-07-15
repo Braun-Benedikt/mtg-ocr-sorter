@@ -4,6 +4,7 @@ from flask import Flask, jsonify, request, send_file, render_template
 from werkzeug.utils import secure_filename
 import io
 import csv
+import atexit # For GPIO cleanup
 from pathlib import Path # Crucial import
 import subprocess # For libcamera-still check in if __name__ == '__main__'
 import requests # For fetching EDHREC data
@@ -27,7 +28,7 @@ if str(project_root_folder) not in sys.path:
 
 # Now, project-specific imports
 try:
-    from web_app.database import init_db, add_card, get_cards, delete_card, get_legendary_creatures
+    from web_app.database import init_db, add_card, get_cards, delete_card, get_legendary_creatures, add_sorting_rule, get_sorting_rules, delete_sorting_rule, evaluate_sorting_rules
 except ModuleNotFoundError as e:
     print(f"ERROR: Could not import database module from web_app.database: {e}")
     print(f"Project root: {project_root_folder}, sys.path: {sys.path}")
@@ -37,11 +38,27 @@ except ModuleNotFoundError as e:
     def get_cards(**kwargs): print("DUMMY get_cards"); return []
     def delete_card(card_id): print(f"DUMMY delete_card: {card_id}"); return False
     def get_legendary_creatures(): print("DUMMY get_legendary_creatures"); return []
+    def add_sorting_rule(name, attribute, operator, value, sort_direction): print(f"DUMMY add_sorting_rule: {name}"); return None
+    def get_sorting_rules(): print("DUMMY get_sorting_rules"); return []
+    def delete_sorting_rule(rule_id): print(f"DUMMY delete_sorting_rule: {rule_id}"); return False
+    def evaluate_sorting_rules(card_data): print("DUMMY evaluate_sorting_rules"); return "right"
 
 try:
     from recognition.ocr_mvp import capture_images_from_camera, process_image_to_db, CardNameCorrector, setup_crop_interactively
     # Define DEFAULT_DICT_PATH using project_root_folder, AFTER project_root_folder is defined.
     DEFAULT_DICT_PATH = str(project_root_folder / "recognition" / "cards" / "card_names_symspell_clean.txt")
+
+    # GPIO Control imports
+    try:
+        from gpio_control import setup_gpio, cleanup_gpio, sort_card_left, sort_card_right, RASPBERRY_PI_ENVIRONMENT
+    except ImportError as e_gpio:
+        print(f"ERROR: Could not import from gpio_control: {e_gpio}")
+        # Define dummy GPIO functions if import fails
+        def setup_gpio(): print("DUMMY setup_gpio: gpio_control not found")
+        def cleanup_gpio(): print("DUMMY cleanup_gpio: gpio_control not found")
+        def sort_card_left(): print("DUMMY sort_card_left: gpio_control not found")
+        def sort_card_right(): print("DUMMY sort_card_right: gpio_control not found")
+        RASPBERRY_PI_ENVIRONMENT = False # Assume not on RPi if module is missing
 except ModuleNotFoundError as e:
     print(f"ERROR: Could not import from recognition.ocr_mvp: {e}")
     print(f"Project root: {project_root_folder}, sys.path: {sys.path}")
@@ -107,16 +124,57 @@ def scan_card():
     if image_path is None:
         return jsonify({"error": "Failed to capture image from camera"}), 500
     processed_card_data = process_image_to_db(image_path, card_corrector, show_gui=False)
+    
+    # Use custom sorting rules to determine sort direction
+    sorting_direction = evaluate_sorting_rules(processed_card_data)
+    
     if processed_card_data and processed_card_data.get("id"):
-        try: os.remove(image_path)
+        # Card recognized and saved
+        if sorting_direction == "left":
+            if RASPBERRY_PI_ENVIRONMENT:
+                print(f"APP: Card '{processed_card_data.get('name')}' recognized, sorting LEFT based on rules.")
+                sort_card_left()
+            else:
+                print(f"APP: Card '{processed_card_data.get('name')}' recognized, (Mock GPIO) sort LEFT.")
+                sort_card_left()
+        else:  # right
+            if RASPBERRY_PI_ENVIRONMENT:
+                print(f"APP: Card '{processed_card_data.get('name')}' recognized, sorting RIGHT based on rules.")
+                sort_card_right()
+            else:
+                print(f"APP: Card '{processed_card_data.get('name')}' recognized, (Mock GPIO) sort RIGHT.")
+                sort_card_right()
+
+        try:
+            if os.path.exists(image_path): os.remove(image_path)
         except OSError as e: print(f"Error removing temporary image {image_path}: {e}")
-        return jsonify(processed_card_data), 201
-    elif processed_card_data:
-        return jsonify({"message": "Image processed, but no card identified or saved.", "details": processed_card_data}), 200
+
+        response_data = processed_card_data.copy()
+        response_data["sorted"] = sorting_direction
+        return jsonify(response_data), 201
     else:
-        try: os.remove(image_path)
+        # Card not recognized or not saved - always sort left
+        if RASPBERRY_PI_ENVIRONMENT:
+            print("APP: Card NOT recognized, attempting to sort LEFT.")
+            sort_card_left()
+            sorting_direction = "left"
+        else:
+            print("APP: Card NOT recognized, (Mock GPIO) sort LEFT.")
+            sort_card_left()
+            sorting_direction = "left (mock)"
+
+        try:
+            if os.path.exists(image_path): os.remove(image_path)
         except OSError as e: print(f"Error removing temporary image {image_path} after failed processing: {e}")
-        return jsonify({"error": "Failed to process image or save card data"}), 500
+
+        if processed_card_data: # Image processed, but no card identified
+             # e.g. {'name': None, 'ocr_name_raw': ' Gibberish', ...}
+            response_data = {"message": "Image processed, but no card identified or saved.",
+                             "details": processed_card_data,
+                             "sorted": sorting_direction}
+            return jsonify(response_data), 200
+        else: # Failed to process image entirely
+            return jsonify({"error": "Failed to process image or save card data", "sorted": sorting_direction}), 500
 
 @app.route('/cards', methods=['GET'])
 def get_all_cards():
@@ -291,6 +349,64 @@ def delete_card_route(card_id):
         print(f"Error deleting card with ID {card_id}: {e}") # Log the error
         return jsonify({"error": "Failed to delete card"}), 500
 
+# Custom Sorting Rules API endpoints
+@app.route('/sorting-rules', methods=['GET'])
+def get_sorting_rules_route():
+    """Get all active sorting rules"""
+    try:
+        rules = get_sorting_rules()
+        return jsonify(rules), 200
+    except Exception as e:
+        print(f"Error getting sorting rules: {e}")
+        return jsonify({"error": "Failed to get sorting rules"}), 500
+
+@app.route('/sorting-rules', methods=['POST'])
+def add_sorting_rule_route():
+    """Add a new sorting rule"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+        required_fields = ['name', 'attribute', 'operator', 'value', 'sort_direction']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+        
+        # Validate sort_direction
+        if data['sort_direction'] not in ['left', 'right']:
+            return jsonify({"error": "sort_direction must be 'left' or 'right'"}), 400
+        
+        # Validate operator
+        valid_operators = ['>', '>=', '<', '<=', '=', '!=', 'contains', 'starts_with', 'ends_with']
+        if data['operator'] not in valid_operators:
+            return jsonify({"error": f"Invalid operator. Must be one of: {valid_operators}"}), 400
+        
+        rule_id = add_sorting_rule(
+            name=data['name'],
+            attribute=data['attribute'],
+            operator=data['operator'],
+            value=data['value'],
+            sort_direction=data['sort_direction']
+        )
+        
+        return jsonify({"message": "Sorting rule added successfully", "rule_id": rule_id}), 201
+    except Exception as e:
+        print(f"Error adding sorting rule: {e}")
+        return jsonify({"error": "Failed to add sorting rule"}), 500
+
+@app.route('/sorting-rules/<int:rule_id>', methods=['DELETE'])
+def delete_sorting_rule_route(rule_id):
+    """Delete a sorting rule"""
+    try:
+        if delete_sorting_rule(rule_id):
+            return jsonify({"message": "Sorting rule deleted successfully"}), 200
+        else:
+            return jsonify({"error": "Sorting rule not found"}), 404
+    except Exception as e:
+        print(f"Error deleting sorting rule with ID {rule_id}: {e}")
+        return jsonify({"error": "Failed to delete sorting rule"}), 500
+
 if __name__ == '__main__':
     dict_dir = project_root_folder / "recognition" / "cards"
     os.makedirs(dict_dir, exist_ok=True)
@@ -302,4 +418,12 @@ if __name__ == '__main__':
         print("libcamera-still found.")
     except Exception: # More general exception for CI environments
         print("WARNING: libcamera-still not found or not runnable. /scan endpoint will likely fail.")
+
+    # Setup GPIO before running the app
+    print("APP: Initializing GPIO...")
+    setup_gpio()
+    # Register GPIO cleanup function to be called on exit
+    atexit.register(cleanup_gpio)
+    print("APP: GPIO initialized and cleanup registered.")
+
     app.run(debug=True, host='0.0.0.0', port=5000)

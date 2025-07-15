@@ -172,3 +172,160 @@ button:hover, .button:hover {
 .delete-button:hover {
     background-color: #c82333; /* Darker red on hover */
 }
+
+/* Custom Sorting Rules Styles */
+.sorting-rules-section {
+    margin: 30px 0;
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.sorting-rules-section h2 {
+    color: #495057;
+    margin-bottom: 10px;
+    text-align: left;
+}
+
+.sorting-rules-section h3 {
+    color: #495057;
+    margin-bottom: 15px;
+    text-align: left;
+}
+
+.add-rule-form {
+    background-color: white;
+    padding: 20px;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+    margin-bottom: 20px;
+}
+
+.form-row {
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.form-row label {
+    min-width: 120px;
+    font-weight: bold;
+    color: #495057;
+}
+
+.form-row input[type="text"],
+.form-row select {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.form-row input[type="text"]:focus,
+.form-row select:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+#addRuleButton {
+    background-color: #28a745;
+    margin-top: 10px;
+}
+
+#addRuleButton:hover {
+    background-color: #1e7e34;
+}
+
+.rules-list {
+    background-color: white;
+    padding: 20px;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+}
+
+.rule-item {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.rule-info {
+    flex-grow: 1;
+}
+
+.rule-name {
+    font-weight: bold;
+    color: #495057;
+    margin-bottom: 5px;
+}
+
+.rule-condition {
+    color: #6c757d;
+    font-size: 14px;
+}
+
+.rule-direction {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+.rule-direction.left {
+    background-color: #dc3545;
+    color: white;
+}
+
+.rule-direction.right {
+    background-color: #28a745;
+    color: white;
+}
+
+.delete-rule-button {
+    background-color: #dc3545;
+    color: white;
+    padding: 6px 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.3s ease;
+}
+
+.delete-rule-button:hover {
+    background-color: #c82333;
+}
+
+/* Responsive adjustments for sorting rules */
+@media (max-width: 600px) {
+    .form-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .form-row label {
+        min-width: auto;
+        margin-bottom: 5px;
+    }
+    
+    .rule-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .delete-rule-button {
+        margin-top: 10px;
+        align-self: flex-end;
+    }
+}

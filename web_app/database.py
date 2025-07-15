@@ -1,6 +1,7 @@
 import sqlite3
 import os
 from datetime import datetime
+from typing import Optional
 
 DATABASE_NAME = 'magic_cards.db'
 DATABASE_PATH = os.path.join(os.path.dirname(__file__), DATABASE_NAME)
@@ -27,11 +28,26 @@ def init_db():
             image_uri TEXT
         )
     ''')
+    
+    # Add custom sorting rules table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sorting_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            attribute TEXT NOT NULL,
+            operator TEXT NOT NULL,
+            value TEXT NOT NULL,
+            sort_direction TEXT NOT NULL,
+            is_active BOOLEAN DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     conn.commit()
     conn.close()
     print(f"Database initialized at {DATABASE_PATH}")
 
-def add_card(name: str, ocr_name_raw: str = None, price: float = None, color_identity: str = None, image_path: str = None, cmc: float = 0.0, type_line: str = '', image_uri: str = ''):
+def add_card(name: str, ocr_name_raw: Optional[str] = None, price: Optional[float] = None, color_identity: Optional[str] = None, image_path: Optional[str] = None, cmc: float = 0.0, type_line: str = '', image_uri: str = ''):
     conn = get_db_connection()
     cursor = conn.cursor()
     timestamp = datetime.now()
@@ -45,7 +61,106 @@ def add_card(name: str, ocr_name_raw: str = None, price: float = None, color_ide
     print(f"Added card: {name}, ID: {card_id}")
     return card_id
 
-def get_cards(color: str = None, mana_cost: float = None, max_price: float = None):
+def add_sorting_rule(name: str, attribute: str, operator: str, value: str, sort_direction: str):
+    """Add a new custom sorting rule"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO sorting_rules (name, attribute, operator, value, sort_direction)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (name, attribute, operator, value, sort_direction))
+    rule_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    print(f"Added sorting rule: {name}, ID: {rule_id}")
+    return rule_id
+
+def get_sorting_rules():
+    """Get all active sorting rules"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, name, attribute, operator, value, sort_direction, is_active, 
+               strftime('%Y-%m-%d %H:%M:%S', created_at) as created_at
+        FROM sorting_rules 
+        WHERE is_active = 1
+        ORDER BY created_at DESC
+    ''')
+    rules = cursor.fetchall()
+    conn.close()
+    return [dict(rule) for rule in rules]
+
+def delete_sorting_rule(rule_id: int):
+    """Delete a sorting rule by setting is_active to 0"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE sorting_rules SET is_active = 0 WHERE id = ?", (rule_id,))
+    conn.commit()
+    rows_affected = cursor.rowcount
+    conn.close()
+    print(f"Attempted to delete sorting rule with ID: {rule_id}. Rows affected: {rows_affected}")
+    return rows_affected > 0
+
+def evaluate_sorting_rules(card_data):
+    """Evaluate all active sorting rules against a card and return the sort direction"""
+    if not card_data or not card_data.get('name'):
+        return 'left'  # Default: unrecognized cards go left
+    
+    rules = get_sorting_rules()
+    if not rules:
+        return 'right'  # Default: recognized cards go right if no rules
+    
+    for rule in rules:
+        if rule['is_active']:
+            card_value = card_data.get(rule['attribute'])
+            rule_value = rule['value']
+            
+            # Convert values for comparison
+            try:
+                if rule['attribute'] in ['cmc', 'price']:
+                    card_value = float(card_value) if card_value is not None else 0.0
+                    rule_value = float(rule_value)
+                else:
+                    card_value = str(card_value).lower() if card_value is not None else ''
+                    rule_value = str(rule_value).lower()
+            except (ValueError, TypeError):
+                continue
+            
+            # Evaluate the condition
+            condition_met = False
+            if rule['operator'] == '>':
+                if isinstance(card_value, (int, float)) and isinstance(rule_value, (int, float)):
+                    condition_met = card_value > rule_value
+            elif rule['operator'] == '>=':
+                if isinstance(card_value, (int, float)) and isinstance(rule_value, (int, float)):
+                    condition_met = card_value >= rule_value
+            elif rule['operator'] == '<':
+                if isinstance(card_value, (int, float)) and isinstance(rule_value, (int, float)):
+                    condition_met = card_value < rule_value
+            elif rule['operator'] == '<=':
+                if isinstance(card_value, (int, float)) and isinstance(rule_value, (int, float)):
+                    condition_met = card_value <= rule_value
+            elif rule['operator'] == '=':
+                condition_met = card_value == rule_value
+            elif rule['operator'] == '!=':
+                condition_met = card_value != rule_value
+            elif rule['operator'] == 'contains':
+                if isinstance(card_value, str) and isinstance(rule_value, str):
+                    condition_met = rule_value in card_value
+            elif rule['operator'] == 'starts_with':
+                if isinstance(card_value, str) and isinstance(rule_value, str):
+                    condition_met = card_value.startswith(rule_value)
+            elif rule['operator'] == 'ends_with':
+                if isinstance(card_value, str) and isinstance(rule_value, str):
+                    condition_met = card_value.endswith(rule_value)
+            
+            if condition_met:
+                return rule['sort_direction']
+    
+    # If no rules match, use default behavior
+    return 'right'
+
+def get_cards(color: Optional[str] = None, mana_cost: Optional[float] = None, max_price: Optional[float] = None):
     conn = get_db_connection()
     cursor = conn.cursor()
 

@@ -82,6 +82,10 @@ def setup_crop_interactively():
         print("Error: Could not load or create an image for ROI selection.")
         return
 
+    # Rotate the image 90 degrees clockwise before displaying for crop selection
+    image = cv2.rotate(image, cv2.ROTATE_90_CLOCKWISE)
+    print("Image for interactive crop setup rotated 90 degrees clockwise.")
+
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     # Placeholder for the selected ROI, to be updated by the callback
@@ -311,8 +315,15 @@ def process_image_to_db(image_path: str, corrector: CardNameCorrector, show_gui:
         print(f"Error loading image {image_path}, cannot process.")
         return None # Indicate failure
 
+    # Rotate the image 90 degrees clockwise
+    image_cv = cv2.rotate(image_cv, cv2.ROTATE_90_CLOCKWISE)
+    print(f"Image {image_path} rotated 90 degrees clockwise.")
+
     cropped = extract_card_name_area(image_cv)
     ocr_raw, ocr_corrected = extract_card_name(cropped, corrector)
+
+    # Always print the OCR string for debugging purposes
+    print(f"DEBUG: OCR Raw String: '{ocr_raw}' | Corrected: '{ocr_corrected}'")
 
     if not ocr_corrected:
         print(f"No card name could be reliably extracted for {image_path}.")
